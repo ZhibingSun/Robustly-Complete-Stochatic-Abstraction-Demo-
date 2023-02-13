@@ -13,7 +13,7 @@ The construction of stochastic abstraction is temporarily based on a uniform dis
 Required package: multipledispatch
 
 
-The 'Library' module contains basic interval objects, inclusion functions, and a class to generate markov set chains (MSC) for coarse state-space discretization. The interval analysis part is a simple version of 'interval.h' and 'interval_vector.h' in https://git.uwaterloo.ca/hybrid-systems-lab/rocs/-/tree/master/src. Two examples are provided. 
+The 'Library' module contains basic interval objects, inclusion functions, and a class to generate markov set chains (MSC) for coarse state-space discretization. The interval analysis part is a simple version of 'interval.h' and 'interval_vector.h' in https://git.uwaterloo.ca/hybrid-systems-lab/rocs/-/tree/master/src. Two examples are provided in 'Example - Library.py' and 'Example - MSC.py'. 
 
 The 'IMCclass' module is for the main purpose. The main procedures are straightforward:
     • Set up the working space
@@ -21,4 +21,4 @@ The 'IMCclass' module is for the main purpose. The main procedures are straightf
     • Set up dynamics
     • Create IMC abstractions
     • Save data
-An example is provided to illustrate. 
+An example is provided in 'Example - IMC - 1.py' to illustrate. 
