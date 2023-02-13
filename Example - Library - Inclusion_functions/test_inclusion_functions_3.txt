@@ -1,0 +1,2 @@
+The image of vector field #3 (without providing the derivatives) is: [[-0.04, 0.04], [-0.04, 0.04]]
+The image of vector field #3 (with providing the derivatives) is: [[-0.0102, 0.0102], [-0.01, 0.01]]

@@ -1,0 +1,4 @@
+The Box object B1 is: [[-0.01, 0.01], [-0.01, 0.01]].
+The width of Box B1 is: 0.02.
+The translated box centered at the origin is: [[-0.01, 0.01], [-0.01, 0.01]].
+-B1 is: [[-0.01, 0.01], [-0.01, 0.01]].
