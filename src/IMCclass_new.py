@@ -89,12 +89,28 @@ class IMC():
             ** (1 / self.dim)
 
         self.N_matrix = math.prod(self.N) + 1
-        self.w, self.N_incl = self.__get_w_N_grid()
+
+        vol = math.prod(self.eta for i in range(0, self.dim))
+        tmp = self.L_f**2 + self.L_b_max**2
+        if tmp != 0:
+            w = math.sqrt((self.ball_coefficient * self.kappa)**2 \
+                                / tmp)
+        else:
+            w = self.eta
+        w_input = self.eta + 0.000001 if w >= self.eta else w
+
+        adjust_N_grid = lambda x: [round(math.floor(self.eta / x) + 1)\
+             for i in range(0, self.dim)]
+
+        self.N_incl = adjust_N_grid(w_input)
+        self.w = (vol / math.prod(adjust_N_grid(w))) ** (1 / self.dim)
+        print('w_refine=', self.w)
+        print('N=', self.N_incl)
         
         #__getQ() returns an iterable 
         #__getQ() works faster than using np.mgrid + np.dstack for high dim
         #Q iterates the 'floor' points of ''state'' grids
-        self.Q = self.getQ
+        # self.Q = self.getQ
               
         #get the size beta of grids for mean and covariance
         self.beta = self.ws_dist_ratio * self.eta if self.L_b == 0 \
@@ -140,52 +156,50 @@ class IMC():
                 'gridsize_of_workplace': [self.eta], \
                 'gridsize_of_measure': [self.beta]}
             
-    #round up the number of grids for discretizing 
-    #the domain of inclusion functions
-    def __adjust_N_grid(self, size):
-        for i in range(0, self.dim):
-            yield round(math.floor(self.eta / size) + 1)
+    # #round up the number of grids for discretizing 
+    # #the domain of inclusion functions
+    # def __adjust_N_grid(self, size):
+    #     for i in range(0, self.dim):
+    #         yield round(math.floor(self.eta / size) + 1)
     
     #Generate the discretized grids.
-    @property
     def getQ(self):
-        def Qgenerator(self):
-            for i in range(0, self.dim):
-                yield np.linspace(self.X[i][0], self.X[i][1], \
-                                  self.N[i]).tolist()
-        return itertools.product(*Qgenerator(self))   
+        tmp = [np.linspace(self.X[i][0], self.X[i][1], \
+                self.N[i]).tolist() for i in range(0, self.dim)]
+        return itertools.product(*tmp)
     
-    
-    #Get the size of [y], i.e. w([y]),
-    #for inclusion functions on each grid.
-    def __get_w_N_grid(self):
-        vol = math.prod(self.eta for i in range(0, self.dim))
+    # #Get the size of [y], i.e. w([y]),
+    # #for inclusion functions on each grid.
+    # def __get_w_N_grid(self):
+    #     vol = math.prod(self.eta for i in range(0, self.dim))
         
-        #Decide if the size of a state grid, eta,
-        #is already small enough to make 
-        #the set of Gauss measures within the required Wasserstein distance, 
-        #which in this case is self.kappa.
-        #Usually, when L_f**2 + L_b_max**2 is large, one needs to further split
-        #the grid into [y], and patch up [mean] and [var]; 
-        #otherwise we just use the state grid to generate [mean] and [var].
+    #     #Decide if the size of a state grid, eta,
+    #     #is already small enough to make 
+    #     #the set of Gauss measures within the required Wasserstein distance, 
+    #     #which in this case is self.kappa.
+    #     #Usually, when L_f**2 + L_b_max**2 is large, one needs to further split
+    #     #the grid into [y], and patch up [mean] and [var]; 
+    #     #otherwise we just use the state grid to generate [mean] and [var].
+    #     #
+    #     #Note that when L_f**2 + L_b_max**2 = 0, 
+    #     #[mean] and [var] reduce to singletons. 
+    #     #
+    #     #This function returns conservative w and a discretization for the 
+    #     #generation of inclusion of the 'reachable set of Gauss measures'. 
         
-        #Note that when L_f**2 + L_b_max**2 = 0, 
-        #[mean] and [var] reduce to singletons. 
-        
-        #This function returns conservative w and a discretization for the 
-        #generation of inclusion of the 'reachable set of Gauss measures'. 
-        
-        if self.L_f**2 + self.L_b_max**2 != 0:
-            w = math.sqrt((self.ball_coefficient * self.kappa)**2 \
-                                / (self.L_f**2 + self.L_b_max**2))
-        else:
-            w = self.eta
-        w_input = self.eta + 0.000001 if w >= self.eta else w
-        N = self.__adjust_N_grid(w_input)
-        w_refine = (vol / math.prod(self.__adjust_N_grid(w))) ** (1 / self.dim)
-        print('w_refine=', w_refine)
-        print('N=', list(self.__adjust_N_grid(w_input)))
-        return w_refine, list(N)
+    #     tmp = self.L_f**2 + self.L_b_max**2
+    #     if tmp != 0:
+    #         w = math.sqrt((self.ball_coefficient * self.kappa)**2 \
+    #                             / tmp)
+    #     else:
+    #         w = self.eta
+    #     w_input = self.eta + 0.000001 if w >= self.eta else w
+
+    #     N = self.__adjust_N_grid(w_input)
+    #     w_refine = (vol / math.prod(self.__adjust_N_grid(w))) ** (1 / self.dim)
+    #     print('w_refine=', w_refine)
+    #     print('N=', list(self.__adjust_N_grid(w_input)))
+    #     return w_refine, list(N)
     
     #Generate [y], which is a pseudo-grid to generate the inclusion of the
     #'reachable set of Gauss measures'. 
@@ -339,7 +353,7 @@ class IMC():
                 std = np.abs(std)
                 row_measure_grid = \
                     np.array([self.__evaluate_discrete_probability(mean, std, \
-                                                    q) for q in self.getQ])
+                                                    q) for q in self.getQ()])
                 row_measure_cemetary = \
                     np.array([self.__evaluate_cemetary_probability(mean, std)])
                 
@@ -356,7 +370,7 @@ class IMC():
         std = self.b if self.L_b == 0 else std_reshape
         row_ref_measure_grid = \
             np.array([self.__evaluate_discrete_probability(mean, std, \
-                                            q) for q in self.getQ])
+                                            q) for q in self.getQ()])
         row_ref_measure_cemetary = \
             np.array([self.__evaluate_cemetary_probability(mean, std)])
         row_measure = \
@@ -415,7 +429,7 @@ class IMC():
     def getQ_slice(self, i, portion):
         slice_length = int(self.N_matrix / portion) + 1
         j = i * slice_length
-        Q_iter = itertools.islice(self.getQ, j, j + slice_length)
+        Q_iter = itertools.islice(self.getQ(), j, j + slice_length)
         return j, Q_iter
         
     

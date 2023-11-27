@@ -13,7 +13,7 @@ import time
 import math
 import pandas as pd
 import os 
-from tqdm import tqdm
+from tqdm.gui import tqdm_gui
 
 
 X = [[0.0001, 1.2]]
@@ -34,13 +34,12 @@ IMC.chws_dist(1.45)
 imc = IMC(X, precision, f, b, L_f, L_b, use_fn_b=True)
 print(imc.dictionary)
 
-
 dirname = 'Example_IMC_1-new'
 if not os.path.isdir('./' + dirname):
     os.mkdir(dirname)
 
 pd.DataFrame(imc.dictionary).to_csv(dirname + '/Dictionary.csv')
-pd.DataFrame({'Grid Point': list(imc.getQ)}).\
+pd.DataFrame({'Grid Point': list(imc.getQ())}).\
     to_csv(dirname + '/Grid_points.csv')
 
 
@@ -48,7 +47,7 @@ pd.DataFrame({'Grid Point': list(imc.getQ)}).\
 
 portion =1
 i = 0
-j, Qiter_slice = imc.getQ_slice(i, portion)
+# j, Qiter_slice = imc.getQ_slice(i, portion)
 
 tic1 = time.time()
 
@@ -67,8 +66,8 @@ with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
 with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
     count = 0
     f.write(str(imc.N_matrix) + '\n')
-    for i, q in enumerate(imc.getQ):
-    # for i, (q) in tqdm(enumerate(imc.getQ):
+    for i, q in enumerate(imc.getQ()):
+    # for i, (q) in tqdm_gui(enumerate(imc.getQ),leave=True):
         row = list(imc.getrow(q))
         #f.write(str(i) + " ")
         for k in range(0, row[-1]):
