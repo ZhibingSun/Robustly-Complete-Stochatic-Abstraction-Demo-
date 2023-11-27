@@ -6,14 +6,14 @@ Created on Fri Apr 21 09:29:22 2023
 @author: ym
 """
 
-from IMCclass_new import IMC
-import Library as lib
+import src.Library as lib
+from src.IMCclass_new import IMC
 import numpy as np
 import time
 import math
 import pandas as pd
 import os 
-
+from tqdm import tqdm
 
 
 X = [[0.0001, 1.2]]
@@ -68,6 +68,7 @@ with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
     count = 0
     f.write(str(imc.N_matrix) + '\n')
     for i, q in enumerate(imc.getQ):
+    # for i, (q) in tqdm(enumerate(imc.getQ):
         row = list(imc.getrow(q))
         #f.write(str(i) + " ")
         for k in range(0, row[-1]):

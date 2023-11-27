@@ -1,2 +1,0 @@
-The image of vector field #2 (without providing the derivatives) is: [[-0.08, 0.08], [-0.08, 0.08]]
-The image of vector field #2 (with providing the derivatives) is: [[-0.010006000000000001, 0.010006000000000001], [-0.010006000000000001, 0.010006000000000001]]

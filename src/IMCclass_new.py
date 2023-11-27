@@ -7,7 +7,7 @@ Updated on Sat Apr 08 08:17:51 2023
 @author: ym
 """
 
-import Library as lib
+import src.Library as lib
 import math
 import itertools
 import time
@@ -48,7 +48,7 @@ class IMC():
     ws_dist_ratio = 1.3  #0.25
     
     #error tolerance
-    err = 0.00000001
+    err = 1e-8
     
     
     def __init__(self, state, precision, f, b, L_f, L_b, \
@@ -78,7 +78,16 @@ class IMC():
         #Determine the 'inflation' precision for the inclusion functions
         self.kappa = self.kappa_coefficient * self.precision
         
-        self.eta, self.N = self.__get_eta_N()
+        eta = self.eps / (self.ws_dist_ratio + 2 * self.ball_coefficient)
+        
+        #round up the number of grids of the state space
+        self.N = [round(math.floor((self.X[i][1] - self.X[i][0]) / eta) + 1)\
+             for i in range(0, self.dim)]
+        
+        #use the complete analysis to obtain the grid size eta (in Eq.(19))
+        self.eta = (self.vol / math.prod(self.N)) \
+            ** (1 / self.dim)
+
         self.N_matrix = math.prod(self.N) + 1
         self.w, self.N_incl = self.__get_w_N_grid()
         
@@ -130,26 +139,12 @@ class IMC():
                'dimension_of_IMC': [self.N_matrix], \
                 'gridsize_of_workplace': [self.eta], \
                 'gridsize_of_measure': [self.beta]}
-    
-    #round up the number of grids of the state space
-    def __adjust_N(self, size):
-        for i in range(0, self.dim):
-            yield round(math.floor((self.X[i][1] - self.X[i][0]) / size) + 1)
             
     #round up the number of grids for discretizing 
     #the domain of inclusion functions
     def __adjust_N_grid(self, size):
         for i in range(0, self.dim):
             yield round(math.floor(self.eta / size) + 1)
-    
-    
-    #use the complete analysis to obtain the grid size eta (in Eq.(19))
-    def __get_eta_N(self): 
-        eta = self.eps / (self.ws_dist_ratio + 2 * self.ball_coefficient)
-        N = self.__adjust_N(eta)
-        eta_refine = (self.vol / math.prod(self.__adjust_N(eta))) \
-            ** (1 / self.dim)
-        return eta_refine, list(N)
     
     #Generate the discretized grids.
     @property

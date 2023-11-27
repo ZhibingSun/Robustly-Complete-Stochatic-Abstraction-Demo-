@@ -1,2 +1,0 @@
-The image of function #1 (without providing the derivatives) is: [[-1.0, 1.0]]
-The image of function #1 (with providing the derivatives) is: [[-3.0, 3.0]]
