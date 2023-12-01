@@ -136,13 +136,18 @@ class IMC():
         #get the size beta of grids for mean and covariance
         self.beta = self.ws_dist_ratio * self.eta if self.L_b == 0 \
             else self.ws_dist_ratio * self.eta / math.sqrt(2)
+
+        #Generate the discretized grids.
+        tmp = [np.linspace(self.X[i][0], self.X[i][1], \
+                self.N[i]) for i in range(0, self.dim)]
+        self.pt_cube = np.array(list(itertools.product(*tmp)))
         
     #Evaluate a 1-dim Gaussian distribution from -infty to x 
     #using the antiderivatie
     def Phi(self, x, mean, sig):
         if sig != 0:
-            return 0.5*(math.erf((x - mean) / (sig * math.sqrt(2))))+0.5
-            #return 0.5*(erf((x - mean) / (sig * math.sqrt(2))))+0.5
+            # return 0.5*(math.erf((x - mean) / (sig * math.sqrt(2))))+0.5
+            return 0.5*(erf((x - mean) / (sig * math.sqrt(2))))+0.5
         else:
             return int(x > mean)
 
@@ -159,12 +164,6 @@ class IMC():
                 'gridsize_of_workplace': [self.eta], \
                 'gridsize_of_measure': [self.beta]}
     
-    #Generate the discretized grids.
-    def getQ(self):
-        tmp = [np.linspace(self.X[i][0], self.X[i][1], \
-                self.N[i]).tolist() for i in range(0, self.dim)]
-        return itertools.product(*tmp)
-    
     #Generate [y], which is a pseudo-grid to generate the inclusion of the
     #'reachable set of Gauss measures'. 
     #As a continuation of __get_w_N_grid( ), 
@@ -174,7 +173,7 @@ class IMC():
                 self.N_incl[i]).tolist() for i in range(0, self.dim)]
         return itertools.product(*tmp)
     
-    #Generate [mean], [std] (or [Cholesky]), which is supposed to be a dim * dim matrix.       
+    #Generate [mean], generate [std] (or [Cholesky]), which is supposed to be a dim * dim matrix.       
     #In this function, 
     #the dim * dim matrix is reshaped as a dim^2 * 1 list of Boxes.
     def __overapprx_row_mean_std(self, grid_point):
@@ -224,47 +223,63 @@ class IMC():
                     tmp2.append([std])
                     #yield [math.floor(std / self.beta) * self.beta]
         return itertools.product(*tmp1), itertools.product(*tmp2)
+    
+    def __evaluate_discrete_probability(self, mean, std):
+        # mean_array = np.array([mean]*(self.N_matrix-1))
+        # np.diag(std)
+        # std_array = np.repeat(np.diag(std),self.N_matrix-1,axis=0)
+        print(std)
+        return np.array([self.Phi(i[0]+self.eta,mean[0],std[0][0]) - self.Phi(i[0],mean[0],std[0][0]) for i in self.pt_cube])
+
+        # std_array = np.repeat(np.diag(std),self.N_matrix-1,axis=0)
+        # tmp1 = norm.cdf(self.eta + self.pt_cube,mean_array,std_array)
+        # tmp2 = norm.cdf(self.pt_cube,mean_array,std_array)
+        # return np.prod(tmp1-tmp2,axis=1)
+
+        # math.prod((self.Phi(q[i] + self.eta, mean[i], std[i][i])   \
+        #                         - self.Phi(q[i], mean[i], std[i][i]))         \
+        #                                    for i in range(self.dim))
+
+    # def __evaluate_discrete_probability(self, mean, std, q):
+    #     #Evaluate the transition probability T(grid_point, q).
         
-    def __evaluate_discrete_probability(self, mean, std, q):
-        #Evaluate the transition probability T(grid_point, q).
+    #     #For each q, 
+    #     #we generate the refs of transition measure T(grid_point) (Gaussians).
         
-        #For each q, 
-        #we generate the refs of transition measure T(grid_point) (Gaussians).
+    #     #The refs should be duplicated for each q.
         
-        #The refs should be duplicated for each q.
+    #     #For dim == 2, 
+    #     #direct multiplication of antiderivative is faster than math.prod.
         
-        #For dim == 2, 
-        #direct multiplication of antiderivative is faster than math.prod.
+    #     #For L_b != 0, the evaluation depends on the correlation:
+    #     #if each dimension is independent, 
+    #     #multiplication of antiderivative is 100 times 
+    #     #faster than using scipy cdf. 
         
-        #For L_b != 0, the evaluation depends on the correlation:
-        #if each dimension is independent, 
-        #multiplication of antiderivative is 100 times 
-        #faster than using scipy cdf. 
-        
-        if self.dim == 2 and not self.cor:
-            return (self.Phi(q[0] + self.eta, mean[0], std[0][0])             \
-                            - self.Phi(q[0], mean[0], std[0][0]))             \
-                     * (self.Phi(q[1] + self.eta, mean[1], std[1][1])         \
-                            - self.Phi(q[1], mean[1], std[1][1]))
-        elif self.dim != 2 and not self.cor:       
-            return math.prod((self.Phi(q[i] + self.eta, mean[i], std[i][i])   \
-                                - self.Phi(q[i], mean[i], std[i][i]))         \
-                                           for i in range(self.dim))
-        elif self.dim == 2 and self.cor:
-            var = np.dot(std, std.T)
-            rv = multivariate_normal(mean, var)
-            return rv.cdf((q[0] + self.eta, q[1] + self.eta))                 \
-                                     + rv.cdf((q[0], q[1]))                   \
-                                     - rv.cdf((q[0], q[1] + self.eta))        \
-                                     - rv.cdf((q[0] + self.eta, q[1]))
-        else:
-            var = np.dot(std, std.T)
-            rv = multivariate_normal(mean, var)
-            I = itertools.product(*((-1, 1) for i in range(self.dim)))
-            J = itertools.product(*((q[i], q[i] + self.eta) \
-                                        for i in range(self.dim)))
-            arr = np.array([rv.cdf(j) * math.prod(i) for i, j in zip(I, J)])    
-            return np.sum(arr)
+    #     if self.dim == 2 and not self.cor:
+    #         return (self.Phi(q[0] + self.eta, mean[0], std[0][0])             \
+    #                         - self.Phi(q[0], mean[0], std[0][0]))             \
+    #                  * (self.Phi(q[1] + self.eta, mean[1], std[1][1])         \
+    #                         - self.Phi(q[1], mean[1], std[1][1]))
+    #     elif self.dim != 2 and not self.cor:       
+    #         return math.prod((self.Phi(q[i] + self.eta, mean[i], std[i][i])   \
+    #                             - self.Phi(q[i], mean[i], std[i][i]))         \
+    #                                        for i in range(self.dim))
+    #     elif self.dim == 2 and self.cor:
+    #         var = np.dot(std, std.T)
+    #         rv = multivariate_normal(mean, var)
+    #         return rv.cdf((q[0] + self.eta, q[1] + self.eta))                 \
+    #                                  + rv.cdf((q[0], q[1]))                   \
+    #                                  - rv.cdf((q[0], q[1] + self.eta))        \
+    #                                  - rv.cdf((q[0] + self.eta, q[1]))
+    #     else:
+    #         var = np.dot(std, std.T)
+    #         rv = multivariate_normal(mean, var)
+    #         I = itertools.product(*((-1, 1) for i in range(self.dim)))
+    #         J = itertools.product(*((q[i], q[i] + self.eta) \
+    #                                     for i in range(self.dim)))
+    #         arr = np.array([rv.cdf(j) * math.prod(i) for i, j in zip(I, J)])    
+    #         return np.sum(arr)
             
     def __evaluate_cemetary_probability(self, mean, std):
         if self.dim == 2 and not self.cor:
@@ -297,15 +312,13 @@ class IMC():
         
     #For each ref mean and ref var, generate a ref row measure.
     def __get_row_measure(self, grid_point):
-        mean_ref, std_ref = self.__ref_mean_std(grid_point)
+        mean_ref_list, std_ref_list = self.__ref_mean_std(grid_point)
         result = []
-        for mean in mean_ref:
-            for std_ref in std_ref:
+        for mean in mean_ref_list:
+            for std_ref in std_ref_list:
                 std = np.array(std_ref).reshape(np.array(self.b).shape)
                 std = np.abs(std)
-                row_measure_grid = \
-                    np.array([self.__evaluate_discrete_probability(mean, std, \
-                                                    q) for q in self.getQ()])
+                row_measure_grid = self.__evaluate_discrete_probability(mean, std)
                 row_measure_cemetary = \
                     np.array([self.__evaluate_cemetary_probability(mean, std)])
                 
@@ -322,7 +335,7 @@ class IMC():
         std = self.b if self.L_b == 0 else std_reshape
         row_ref_measure_grid = \
             np.array([self.__evaluate_discrete_probability(mean, std, \
-                                            q) for q in self.getQ()])
+                                            q) for q in self.pt_cube])
         row_ref_measure_cemetary = \
             np.array([self.__evaluate_cemetary_probability(mean, std)])
         row_measure = \

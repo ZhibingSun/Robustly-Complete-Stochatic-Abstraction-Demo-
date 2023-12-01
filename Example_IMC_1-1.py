@@ -34,14 +34,9 @@ L_b = 50 * math.sqrt(dt) * sigma
 imc = IMC(X, precision, f, b, L_f, L_b, use_fn_b=True, ws_dist_ratio=1.45)
 print(imc.dictionary)
 
-dirname = './Example_IMC_1-new'
+dirname = '/Users/z235sun/Desktop/Example_IMC_1-new'
 if not os.path.isdir(dirname):
     os.mkdir(dirname)
-
-pd.DataFrame(imc.dictionary).to_csv(dirname + '/Dictionary.csv')
-pd.DataFrame({'Grid Point': list(imc.getQ())}).\
-    to_csv(dirname + '/Grid_points.csv')
-
 
 #output IMC
 
@@ -66,9 +61,9 @@ with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
 with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
     count = 0
     f.write(str(imc.N_matrix) + '\n')
-    # for i, q in enumerate(imc.getQ()):
-    for i, (q) in tqdm(enumerate(imc.getQ()),total = imc.N_matrix):
-    # for i, (q) in tqdm_gui(enumerate(imc.getQ()),leave=True):
+    # for i, q in enumerate(imc.pt_cube):
+    for i, (q) in tqdm(enumerate(imc.pt_cube),total = imc.N_matrix):
+    # for i, (q) in tqdm_gui(enumerate(imc.pt_cube),leave=True):
         row = imc.output(q)
         #f.write(str(i) + " ")
         for k in range(0, len(row)):
