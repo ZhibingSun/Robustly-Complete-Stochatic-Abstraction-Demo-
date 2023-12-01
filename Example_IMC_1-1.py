@@ -13,6 +13,7 @@ import time
 import math
 import pandas as pd
 import os 
+from tqdm import tqdm
 from tqdm.gui import tqdm_gui
 
 
@@ -30,12 +31,11 @@ b = lambda x: sigma * lib.sqrt(x) * math.sqrt(dt)
 L_f = 1 - a * dt
 L_b = 50 * math.sqrt(dt) * sigma
 
-IMC.chws_dist(1.45)
-imc = IMC(X, precision, f, b, L_f, L_b, use_fn_b=True)
+imc = IMC(X, precision, f, b, L_f, L_b, use_fn_b=True, ws_dist_ratio=1.45)
 print(imc.dictionary)
 
-dirname = 'Example_IMC_1-new'
-if not os.path.isdir('./' + dirname):
+dirname = './Example_IMC_1-new'
+if not os.path.isdir(dirname):
     os.mkdir(dirname)
 
 pd.DataFrame(imc.dictionary).to_csv(dirname + '/Dictionary.csv')
@@ -66,15 +66,16 @@ with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
 with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
     count = 0
     f.write(str(imc.N_matrix) + '\n')
-    for i, q in enumerate(imc.getQ()):
-    # for i, (q) in tqdm_gui(enumerate(imc.getQ),leave=True):
-        row = list(imc.getrow(q))
+    # for i, q in enumerate(imc.getQ()):
+    for i, (q) in tqdm(enumerate(imc.getQ()),total = imc.N_matrix):
+    # for i, (q) in tqdm_gui(enumerate(imc.getQ()),leave=True):
+        row = imc.output(q)
         #f.write(str(i) + " ")
-        for k in range(0, row[-1]):
+        for k in range(0, len(row)):
             f.write(str(row[k][0]) + " " + str(row[k][1]) + " " + str(row[k][2]) + " ")
             #f.write('; ')
         f.write(str(imc.N_matrix) + '\n')
-        count += row[-1]
+        count += len(row)
     f.write(str(imc.N_matrix - 1) + " 1 1 " + str(imc.N_matrix) + '\n')
     count += 1
 

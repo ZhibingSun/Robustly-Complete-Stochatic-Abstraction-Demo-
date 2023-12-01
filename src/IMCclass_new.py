@@ -13,6 +13,7 @@ import itertools
 import time
 import numpy as np
 from scipy.stats import multivariate_normal
+from scipy.stats import norm
 from scipy.special import erf
 from collections import deque
 
@@ -29,30 +30,31 @@ for Verification of Stochastic Systems', FORMATS 2022.
 """
 
 class IMC():
-    #The coefficient used to generate a pseudo-discretization of the state 
-    #space during the generation of the image of inclusion functions, 
-    #such that the distance between the image of the inclusion functions 
-    #and the actual image of the nonlinear vector field can be bounded by 
-    #the prescibed precision times the kappa_coefficient.
-    kappa_coefficient = 0.50    
-    
-    #Set a ratio that is within (0, 1) for the prescibed precision
-    eps_margin = 0.999
-    
-    #The sup Lipschitz constant of test functions of ws norm.
-    ball_coefficient = 1 
-    
-    #Specified ws distance ratio w.r.t. the grid size.
-    #The multiplication of ws_dist_ratio and the grid size returns 
-    #the distance w.r.t. the reference measure.
-    ws_dist_ratio = 1.3  #0.25
-    
-    #error tolerance
-    err = 1e-8
-    
-    
     def __init__(self, state, precision, f, b, L_f, L_b, \
+                 kappa_coefficient=0.50,eps_margin=0.999,\
+                 ball_coefficient=1,ws_dist_ratio = 1.3, err=1e-8,\
                  cor=None, fp=None, bp=None, use_fn_f=None, use_fn_b=None):
+        #The coefficient used to generate a pseudo-discretization of the state 
+        #space during the generation of the image of inclusion functions, 
+        #such that the distance between the image of the inclusion functions 
+        #and the actual image of the nonlinear vector field can be bounded by 
+        #the prescibed precision times the kappa_coefficient.
+        self.kappa_coefficient = kappa_coefficient
+        
+        #Set a ratio that is within (0, 1) for the prescibed precision
+        self.eps_margin = eps_margin
+        
+        #The sup Lipschitz constant of test functions of ws norm.
+        self.ball_coefficient = ball_coefficient
+        
+        #Specified ws distance ratio w.r.t. the grid size.
+        #The multiplication of ws_dist_ratio and the grid size returns 
+        #the distance w.r.t. the reference measure.
+        self.ws_dist_ratio = ws_dist_ratio  #0.25
+        
+        #error tolerance
+        self.err = err
+        
         self.dim = len(state)
         self.X = state
         self.diam = max(self.X[i][1]-self.X[i][0] for i in range(0, self.dim))
@@ -90,6 +92,19 @@ class IMC():
 
         self.N_matrix = math.prod(self.N) + 1
 
+        ##begin __get_w_N_grid
+        #Get the size of [y], i.e. w([y]),
+        #for inclusion functions on each grid.
+        #Decide if the size of a state grid, eta,
+        #is already small enough to make 
+        #the set of Gauss measures within the required Wasserstein distance, 
+        #which in this case is self.kappa.
+        #Usually, when L_f**2 + L_b_max**2 is large, one needs to further split
+        #the grid into [y], and patch up [mean] and [var]; 
+        #otherwise we just use the state grid to generate [mean] and [var].
+        #
+        #Note that when L_f**2 + L_b_max**2 = 0, 
+        #[mean] and [var] reduce to singletons.
         vol = math.prod(self.eta for i in range(0, self.dim))
         tmp = self.L_f**2 + self.L_b_max**2
         if tmp != 0:
@@ -99,13 +114,19 @@ class IMC():
             w = self.eta
         w_input = self.eta + 0.000001 if w >= self.eta else w
 
+        #round up the number of grids for discretizing 
+        #the domain of inclusion functions
         adjust_N_grid = lambda x: [round(math.floor(self.eta / x) + 1)\
              for i in range(0, self.dim)]
 
+        #a discretization for the generation of inclusion 
+        # of the 'reachable set of Gauss measures'.
         self.N_incl = adjust_N_grid(w_input)
+        #conservative w
         self.w = (vol / math.prod(adjust_N_grid(w))) ** (1 / self.dim)
         print('w_refine=', self.w)
         print('N=', self.N_incl)
+        ##end __get_w_N_grid
         
         #__getQ() returns an iterable 
         #__getQ() works faster than using np.mgrid + np.dstack for high dim
@@ -118,49 +139,25 @@ class IMC():
         
     #Evaluate a 1-dim Gaussian distribution from -infty to x 
     #using the antiderivatie
-    @staticmethod
-    def Phi(x, mean, sig):
+    def Phi(self, x, mean, sig):
         if sig != 0:
             return 0.5*(math.erf((x - mean) / (sig * math.sqrt(2))))+0.5
             #return 0.5*(erf((x - mean) / (sig * math.sqrt(2))))+0.5
         else:
             return int(x > mean)
-    
-    @classmethod
-    def chkappa_coefficient(cls, new_coefficient):
-        cls.kappa_coefficient = new_coefficient    
-    
-    @classmethod
-    def cheps_margin(cls, new_coefficient):
-        cls.eps_margin = new_coefficient  
+
+    # def Phi(self, x, mean, sig):
+    #     return norm.cdf(x,mean,sig)
         
-    @classmethod
-    def chball_coefficient(cls, new_coefficient):
-        cls.ball_coefficient = new_coefficient 
-        
-    @classmethod
-    def chws_dist(cls, new_coefficient):
-        cls.ws_dist_ratio = new_coefficient 
-        
-    @classmethod
-    def cherr(cls, new_coefficient):
-        cls.err = new_coefficient  
-        
-    @property 
+    @property
     def dictionary(self):
         return {'dimension_of_workplace': [self.dim],\
-               'diam_of_workplace': [self.diam], \
-               'vol_of_workplace': [self.vol], \
+               'diameter_of_workplace': [self.diam], \
+               'volume_of_workplace': [self.vol], \
                'number_of_grid_workplace': [self.N], \
                'dimension_of_IMC': [self.N_matrix], \
                 'gridsize_of_workplace': [self.eta], \
                 'gridsize_of_measure': [self.beta]}
-            
-    # #round up the number of grids for discretizing 
-    # #the domain of inclusion functions
-    # def __adjust_N_grid(self, size):
-    #     for i in range(0, self.dim):
-    #         yield round(math.floor(self.eta / size) + 1)
     
     #Generate the discretized grids.
     def getQ(self):
@@ -168,111 +165,65 @@ class IMC():
                 self.N[i]).tolist() for i in range(0, self.dim)]
         return itertools.product(*tmp)
     
-    # #Get the size of [y], i.e. w([y]),
-    # #for inclusion functions on each grid.
-    # def __get_w_N_grid(self):
-    #     vol = math.prod(self.eta for i in range(0, self.dim))
-        
-    #     #Decide if the size of a state grid, eta,
-    #     #is already small enough to make 
-    #     #the set of Gauss measures within the required Wasserstein distance, 
-    #     #which in this case is self.kappa.
-    #     #Usually, when L_f**2 + L_b_max**2 is large, one needs to further split
-    #     #the grid into [y], and patch up [mean] and [var]; 
-    #     #otherwise we just use the state grid to generate [mean] and [var].
-    #     #
-    #     #Note that when L_f**2 + L_b_max**2 = 0, 
-    #     #[mean] and [var] reduce to singletons. 
-    #     #
-    #     #This function returns conservative w and a discretization for the 
-    #     #generation of inclusion of the 'reachable set of Gauss measures'. 
-        
-    #     tmp = self.L_f**2 + self.L_b_max**2
-    #     if tmp != 0:
-    #         w = math.sqrt((self.ball_coefficient * self.kappa)**2 \
-    #                             / tmp)
-    #     else:
-    #         w = self.eta
-    #     w_input = self.eta + 0.000001 if w >= self.eta else w
-
-    #     N = self.__adjust_N_grid(w_input)
-    #     w_refine = (vol / math.prod(self.__adjust_N_grid(w))) ** (1 / self.dim)
-    #     print('w_refine=', w_refine)
-    #     print('N=', list(self.__adjust_N_grid(w_input)))
-    #     return w_refine, list(N)
-    
     #Generate [y], which is a pseudo-grid to generate the inclusion of the
     #'reachable set of Gauss measures'. 
     #As a continuation of __get_w_N_grid( ), 
     #this function records the 'bottom-left' point of the required-size grids.
     def __get_incl_meas_grid(self, grid):
-        def Qgenerator(self):
-            for i in range(0, self.dim):
-                yield np.linspace(grid[i][0], grid[i][1], 
-                                  self.N_incl[i]).tolist()
-        return itertools.product(*Qgenerator(self))  
+        tmp = [np.linspace(grid[i][0], grid[i][1], \
+                self.N_incl[i]).tolist() for i in range(0, self.dim)]
+        return itertools.product(*tmp)
     
-    #Generate [mean]. 
-    #This is for storage purpose, hence 'yield' is preferred over 'return'.
-    def __overapprx_mean_row(self, grid_point):
-        grid = [[grid_point[i], grid_point[i] + self.eta] \
-                for i in range(self.dim)]
-        Q_meas = self.__get_incl_meas_grid(grid)
-        for q in Q_meas:
-            g_box = [[q[i], q[i] + self.w] for i in range(self.dim)]
-            result = lib.fn(g_box, self.f) if self.use_fn_f is not None \
-                else (lib.fc(g_box, self.f, self.L_f, self.fp) if self.L_f != 0 \
-                      else self.f)
-            yield result
-            
-    #Generate [std] (or [Cholesky]), which is supposed to be a dim * dim matrix.       
+    #Generate [mean], [std] (or [Cholesky]), which is supposed to be a dim * dim matrix.       
     #In this function, 
     #the dim * dim matrix is reshaped as a dim^2 * 1 list of Boxes.
-    def __overapprx_std_row(self, grid_point):
+    def __overapprx_row_mean_std(self, grid_point):
         grid = [[grid_point[i], grid_point[i] + self.eta] \
                 for i in range(self.dim)]
         Q_meas = self.__get_incl_meas_grid(grid)
+        mean = []
+        std = []
         for q in Q_meas:
             g_box = [[q[i], q[i] + self.w] for i in range(self.dim)]
-            result = [lib.fn([g_box[i]], self.b[i][j]) \
+            mean.append(lib.fn(g_box, self.f) if self.use_fn_f is not None \
+                else (lib.fc(g_box, self.f, self.L_f, self.fp) if self.L_f != 0 \
+                      else self.f))
+            std.append([lib.fn([g_box[i]], self.b[i][j]) \
                       if self.use_fn_b is not None \
                       else(lib.fc([g_box[i]], self.b[i][j], self.L_b[i][j]) \
                            if self.L_b[i][j] != 0 else self.b[i][j]) \
-                          for i in range(self.dim) for j in range(self.dim)]
-            yield result
+                          for i in range(self.dim) for j in range(self.dim)])
+        return mean, std
     
     #discretize [mean] by beta and find ref points of mean
-    def __mean_ref(self, grid_point):
-        #Generate ref point of mean.
-        def mean_ref_generator(self):
-            for mean_box in self.__overapprx_mean_row(grid_point):
-                for i in range(self.dim):
-                    if isinstance(mean_box, lib.Box):
-                        a = math.floor(mean_box.X[i][1] / self.beta) * self.beta
-                        yield np.mgrid[mean_box.X[i][0]:a:self.beta] \
-                            if a >= mean_box.X[i][0] else [mean_box.X[i][0]]
-                    else:
-                        yield [mean_box[i]]
-        return itertools.product(*mean_ref_generator(self)) 
-    
     #discretize [std] (or [Cholesky]) by beta and find ref points of mean
-    def __std_ref(self, grid_point):
+    def __ref_mean_std(self, grid_point):
+        mean_list, std_list = self.__overapprx_row_mean_std(grid_point)
         #Generate ref point of mean.
-        def std_ref_generator(self):
-            for std_box in self.__overapprx_std_row(grid_point):
-                for std in std_box:
-                    if isinstance(std, lib.Box):
-                        a = math.floor(std.X[0][1] / self.beta) * self.beta
-                        yield np.mgrid[std.X[0][0]:a:self.beta]  \
-                            if a >= std.X[0][0] else [std.X[0][0]]
-                    else:
-                        #In this case, the current entry of b is a constant.
-                        #The generator should yield an iterable 
-                        #rather than a number for the downstream calculation.
-                        yield [std]
-                        #yield [math.floor(std / self.beta) * self.beta]
-        return itertools.product(*std_ref_generator(self))  
-    
+        tmp1 = []
+        for mean_box in mean_list:
+            for i in range(self.dim):
+                if isinstance(mean_box, lib.Box):
+                    a = math.floor(mean_box.X[i][1] / self.beta) * self.beta
+                    tmp1.append(np.mgrid[mean_box.X[i][0]:a:self.beta] \
+                        if a >= mean_box.X[i][0] else [mean_box.X[i][0]])
+                else:
+                    tmp1.append([mean_box[i]])
+        #Generate ref point of std.
+        tmp2 = []
+        for std_box in std_list:
+            for std in std_box:
+                if isinstance(std, lib.Box):
+                    a = math.floor(std.X[0][1] / self.beta) * self.beta
+                    tmp2.append(np.mgrid[std.X[0][0]:a:self.beta]  \
+                        if a >= std.X[0][0] else [std.X[0][0]])
+                else:
+                    #In this case, the current entry of b is a constant.
+                    #The generator should yield an iterable 
+                    #rather than a number for the downstream calculation.
+                    tmp2.append([std])
+                    #yield [math.floor(std / self.beta) * self.beta]
+        return itertools.product(*tmp1), itertools.product(*tmp2)
         
     def __evaluate_discrete_probability(self, mean, std, q):
         #Evaluate the transition probability T(grid_point, q).
@@ -346,9 +297,10 @@ class IMC():
         
     #For each ref mean and ref var, generate a ref row measure.
     def __get_row_measure(self, grid_point):
+        mean_ref, std_ref = self.__ref_mean_std(grid_point)
         result = []
-        for mean in self.__mean_ref(grid_point):  
-            for std_ref in self.__std_ref(grid_point):
+        for mean in mean_ref:
+            for std_ref in std_ref:
                 std = np.array(std_ref).reshape(np.array(self.b).shape)
                 std = np.abs(std)
                 row_measure_grid = \
@@ -395,28 +347,13 @@ class IMC():
         bounds = list(zip(lower_bounds, upper_bounds))
         result = np.stack(bounds, axis=0)
         return result
-
-
-    def __output(original_function):
-        def wrapper_function(*args):
-            count = 0
-            for i, j in enumerate(original_function(*args)):
-                if j[0] == 0 and j[1] == 0 :
-                    continue
-                else:
-                    count += 1
-                    yield i, j[0], j[1]
-            yield count
-        return wrapper_function
     
-    #Get a row of IMC abstraction.
-    #The entries whose lower bound and upper bound are both 0 are omitted.  
-    @__output
-    def getrow(self, grid_point):
-        IMC_box = self.__bounds_row_measure(grid_point)
-        assert IMC_box.shape[0] == self.N_matrix
-        for i in range(self.N_matrix):
-            yield IMC_box[i]
+    def output(self, grid_point):
+        row = []
+        for i, j in enumerate(self.__bounds_row_measure(grid_point)):
+            if j[1]:
+                row.append([i,j[0],j[1]])
+        return row
             
     def getrow_ref(self, grid_point):
         ref_measure = self.__get_row_ref_measure(grid_point)
@@ -424,29 +361,12 @@ class IMC():
         nonzero_index = np.nonzero(ref_measure)
         for i in nonzero_index[0]:
             yield i, ref_measure[i]
-
         
     def getQ_slice(self, i, portion):
         slice_length = int(self.N_matrix / portion) + 1
         j = i * slice_length
         Q_iter = itertools.islice(self.getQ(), j, j + slice_length)
         return j, Q_iter
-        
-    
-    def get_transition_grid(self, q):
-        return list(self.getrow(q))
-
-    def iter_transition(self):
-        for q in self.getQ:
-            yield sum(1 for _ in self.getrow(q))
-            
-    def get_transition(self):
-        count = np.fromiter(self.iter_transition(), dtype=int)
-        return np.sum(count)
-
-
-
-
 
 if __name__ == '__main__':
     
@@ -549,24 +469,3 @@ if __name__ == '__main__':
             print('Stopped at=', 0)
     finally:
         print('Computation time of a single row is {} sec'.format(time.time()-tic))
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
