@@ -18,7 +18,7 @@ from tqdm.gui import tqdm_gui
 
 
 X = [[0.0001, 1.2]]
-precision = 0.0008
+precision = 8e-4
 a = 0.2 # mean reversion rate
 l = 0.05 # long-term mean
 sigma = 0.3 # volatility
@@ -34,7 +34,7 @@ L_b = 50 * math.sqrt(dt) * sigma
 imc = IMC(X, precision, f, b, L_f, L_b, use_fn_b=True, ws_dist_ratio=1.45)
 print(imc.dictionary)
 
-dirname = '/Users/z235sun/Desktop/Example_IMC_1-new'
+dirname = './Example_IMC_1-new'
 if not os.path.isdir(dirname):
     os.mkdir(dirname)
 
@@ -61,21 +61,38 @@ with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
 with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
     count = 0
     f.write(str(imc.N_matrix) + '\n')
-    # for i, q in enumerate(imc.pt_cube):
-    for i, (q) in tqdm(enumerate(imc.pt_cube),total = imc.N_matrix):
+    # for i, q in enumerate(imc.pt_cube[:-1]):
+    for i, (q) in tqdm(enumerate(imc.pt_cube[:-1]),total = imc.N_matrix-1):
     # for i, (q) in tqdm_gui(enumerate(imc.pt_cube),leave=True):
         row = imc.output(q)
-        #f.write(str(i) + " ")
         for k in range(0, len(row)):
-            f.write(str(row[k][0]) + " " + str(row[k][1]) + " " + str(row[k][2]) + " ")
-            #f.write('; ')
-        f.write(str(imc.N_matrix) + '\n')
+            f.write(f"{row[k][0]} {row[k][1]} {row[k][2]} ")
+        f.write(f"{imc.N_matrix}\n")
         count += len(row)
-    f.write(str(imc.N_matrix - 1) + " 1 1 " + str(imc.N_matrix) + '\n')
+    f.write(f"{imc.N_matrix-1} 1.0 1.0 {imc.N_matrix}\n")
     count += 1
+
+# with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
+#     count = 0
+#     rows = []
+#     f.write(str(imc.N_matrix) + '\n')
+#     # for i, q in enumerate(imc.pt_cube[:-1]):
+#     for i, (q) in tqdm(enumerate(imc.pt_cube[:-1]),total = imc.N_matrix-1):
+#     # for i, (q) in tqdm_gui(enumerate(imc.pt_cube),leave=True):
+#         rows.append(imc.output(q))
+#         count += len(rows[i])
+    
+#     for i, (row) in tqdm(enumerate(rows),total = imc.N_matrix-1):
+#     # for i, (q) in tqdm_gui(enumerate(imc.pt_cube),leave=True):
+#         for k in range(0, len(row)):
+#             f.write(f"{row[k][0]} {row[k][1]} {row[k][2]} ")
+#         f.write(f"{imc.N_matrix}\n")
+    
+#     f.write(f"{imc.N_matrix-1} 1.0 1.0 {imc.N_matrix}\n")
+#     count += 1
 
 with open(dirname + '/label1_1.txt', 'w') as f:
     f.write(str(count) + '\n')
 
-print('Computation time of IMC abstraction = {0} sec'.format(time.time() - tic1))
+print(f'Computation time of IMC abstraction = {time.time() - tic1} sec')
 
