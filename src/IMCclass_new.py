@@ -83,10 +83,14 @@ class IMC():
         eta = self.eps / (self.ws_dist_ratio + 2 * self.ball_coefficient)
         
         #round up the number of grids of the state space
-        self.N = [round(math.floor((self.X[i][1] - self.X[i][0]) / eta) + 1)\
+        self.N = [math.ceil((self.X[i][1] - self.X[i][0]) / eta)\
              for i in range(0, self.dim)]
         
         #use the complete analysis to obtain the grid size eta (in Eq.(19))
+        
+        # self.et = [(self.X[i][1] - self.X[i][0]) / self.N[i]\
+        #     for i in range(0, self.dim)]
+        
         self.eta = (self.vol / math.prod(self.N)) \
             ** (1 / self.dim)
 
@@ -106,17 +110,18 @@ class IMC():
         #Note that when L_f**2 + L_b_max**2 = 0, 
         #[mean] and [var] reduce to singletons.
         vol = math.prod(self.eta for i in range(0, self.dim))
-        tmp = self.L_f**2 + self.L_b_max**2
-        if tmp != 0:
-            w = math.sqrt((self.ball_coefficient * self.kappa)**2 \
-                                / tmp)
+        
+        if self.L_f and self.L_b_max:   # self.L_f**2 + self.L_b_max**2 != 0
+            # w = math.sqrt((self.ball_coefficient * self.kappa)**2 \
+            #                     / tmp)
+            w = self.ball_coefficient * self.kappa / math.sqrt(self.L_f**2 + self.L_b_max**2)
         else:
             w = self.eta
         w_input = self.eta + 1e-6 if w >= self.eta else w
 
         #round up the number of grids for discretizing 
         #the domain of inclusion functions
-        adjust_N_grid = lambda x: [round(math.floor(self.eta / x) + 1)\
+        adjust_N_grid = lambda x: [math.ceil(self.eta / x)\
              for i in range(0, self.dim)]
 
         #a discretization for the generation of inclusion 
@@ -134,8 +139,9 @@ class IMC():
         # self.Q = self.getQ
               
         #get the size beta of grids for mean and covariance
-        self.beta = self.ws_dist_ratio * self.eta if self.L_b == 0 \
-            else self.ws_dist_ratio * self.eta / math.sqrt(2)
+        tmp = self.ws_dist_ratio * self.eta
+        self.beta = tmp if self.L_b == 0 \
+            else tmp / math.sqrt(2)
 
         #Generate the discretized grids.
         tmp = [np.linspace(self.X[i][0], self.X[i][1], \
@@ -384,25 +390,44 @@ class IMC():
     
     def output(self, grid_point):
         row_measure = self.__get_row_measure(grid_point)
-        upper_bounds = self.beta + \
-            np.maximum.reduce(row_measure)
+        
+        if self.N_incl[0] > 1:
+             upper_bounds = np.max(row_measure, axis=0)
+             lower_bounds = np.min(row_measure, axis=0)
+        else:
+            upper_bounds = lower_bounds = row_measure[0]
+
+        # index = np.nonzero(upper_bounds)
+        # loc = np.argwhere(upper_bounds)
+        # upper_bounds = upper_bounds[index]
+        # lower_bounds = lower_bounds[index]
+
+
+        upper_bounds = upper_bounds + self.beta
         upper_bounds = np.where(upper_bounds > 1, 1, upper_bounds)
         upper_bounds = \
-            np.where(upper_bounds < self.err + self.beta, 0, upper_bounds)
-        lower_bounds = -self.beta + \
-            np.minimum.reduce(row_measure)
+            np.where(upper_bounds == self.beta, 0, upper_bounds)
+        
+        lower_bounds = lower_bounds - self.beta
         lower_bounds = np.where(lower_bounds < self.err, 0, lower_bounds)
         lower_bounds = \
             np.where(lower_bounds > 1 - self.err -self.beta, 1, lower_bounds)
         row = []
+        
+        # for i, j in enumerate (loc):
+        #     row.append([j,lower_bounds[i],upper_bounds[i]])
+
         for i, j in enumerate(upper_bounds):
             if j:
+                # j = j + self.beta
                 # if j > 1:
                 #     j = 1
-                # if lower_bounds[i] < self.err:
-                #     lower_bounds[i] = 0
-                # if lower_bounds[i] > 1 - self.err -self.beta:
+                # if lower_bounds[i] > 1 - self.err:
                 #     lower_bounds[i] = 1
+                # else:
+                #     lower_bounds[i] = lower_bounds[i] - self.beta
+                #     if lower_bounds[i] < self.err:
+                #         lower_bounds[i] = 0
                 row.append([i,lower_bounds[i],j])
         return row
 
