@@ -14,6 +14,7 @@ import time
 import numpy as np
 # from scipy.stats import multivariate_normal
 from scipy.stats import norm
+from scipy.special import ndtr
 # from scipy.special import erf
 # from collections import deque
 
@@ -58,8 +59,8 @@ class IMC():
         self.dim = len(state)
         self.X = state
         self.diam = max(self.X[i][1]-self.X[i][0] for i in range(0, self.dim))
-        self.vol = math.prod(self.X[i][1]-self.X[i][0] \
-                             for i in range(0, self.dim))
+        self.vol = np.prod([self.X[i][1]-self.X[i][0] \
+                             for i in range(self.dim)])
         self.precision = precision
         
         #This is used for a direct calculation of eta
@@ -80,21 +81,22 @@ class IMC():
         #Determine the 'inflation' precision for the inclusion functions
         self.kappa = self.kappa_coefficient * self.precision
         
-        eta = self.eps / (self.ws_dist_ratio + 2 * self.ball_coefficient)
+        eta_nominal = self.eps / (self.ws_dist_ratio + 2 * self.ball_coefficient)
         
         #round up the number of grids of the state space
-        self.N = [math.ceil((self.X[i][1] - self.X[i][0]) / eta)\
-             for i in range(0, self.dim)]
+        self.N = [math.ceil((self.X[i][1] - self.X[i][0]) / eta_nominal)\
+             for i in range(self.dim)]
         
         #use the complete analysis to obtain the grid size eta (in Eq.(19))
         
-        # self.et = [(self.X[i][1] - self.X[i][0]) / self.N[i]\
-        #     for i in range(0, self.dim)]
-        
-        self.eta = (self.vol / math.prod(self.N)) \
-            ** (1 / self.dim)
+        self.eta = [(self.X[i][1] - self.X[i][0]) / self.N[i]\
+            for i in range(self.dim)]
+        self.eta_max = np.max(self.eta)
 
-        self.N_matrix = math.prod(self.N) + 1
+        # self.eta = (self.vol / math.prod(self.N)) \
+        #     ** (1 / self.dim)
+
+        self.N_matrix = np.prod(self.N) + 1
 
         ##begin __get_w_N_grid
         #Get the size of [y], i.e. w([y]),
@@ -109,57 +111,73 @@ class IMC():
         #
         #Note that when L_f**2 + L_b_max**2 = 0, 
         #[mean] and [var] reduce to singletons.
-        vol = math.prod(self.eta for i in range(0, self.dim))
-        
+        vol = np.prod(self.eta)
+        print(vol)
+
         if self.L_f and self.L_b_max:   # self.L_f**2 + self.L_b_max**2 != 0
             # w = math.sqrt((self.ball_coefficient * self.kappa)**2 \
             #                     / tmp)
-            w = self.ball_coefficient * self.kappa / math.sqrt(self.L_f**2 + self.L_b_max**2)
+            w_nominal = self.ball_coefficient * self.kappa / math.sqrt(self.L_f**2 + self.L_b_max**2)
         else:
-            w = self.eta
-        w_input = self.eta + 1e-6 if w >= self.eta else w
+            w_nominal = self.eta_max
+        # w_input = self.eta_max + 1e-6 if w >= self.eta_max else w
 
         #round up the number of grids for discretizing 
         #the domain of inclusion functions
-        adjust_N_grid = lambda x: [math.ceil(self.eta / x)\
-             for i in range(0, self.dim)]
+        adjust_N_grid = lambda x: [math.ceil(self.eta[i] / x)\
+             for i in range(self.dim)]
 
         #a discretization for the generation of inclusion 
         # of the 'reachable set of Gauss measures'.
-        self.N_incl = adjust_N_grid(w_input)
+        # self.N_incl = adjust_N_grid(w_input)
+
+
         #conservative w
-        self.w = (vol / math.prod(adjust_N_grid(w))) ** (1 / self.dim)
-        print('w_refine=', self.w)
-        print('N=', self.N_incl)
-        ##end __get_w_N_grid
+        self.n_meas = adjust_N_grid(w_nominal)
+        self.w = [self.eta[i]/self.n_meas[i]\
+            for i in range(self.dim)] 
+        self.w_max  = max(self.w)
+        # self.w = (vol / math.prod(adjust_N_grid(w))) ** (1 / self.dim)
         
-        #__getQ() returns an iterable 
-        #__getQ() works faster than using np.mgrid + np.dstack for high dim
-        #Q iterates the 'floor' points of ''state'' grids
-        # self.Q = self.getQ
+        print('w_refine=', self.w_max)
+        print('N=', self.n_meas)
+        ##end __get_w_N_grid
               
         #get the size beta of grids for mean and covariance
-        tmp = self.ws_dist_ratio * self.eta
+        tmp = self.ws_dist_ratio * self.eta_max
         self.beta = tmp if self.L_b == 0 \
             else tmp / math.sqrt(2)
 
         #Generate the discretized grids.
-        tmp = [np.linspace(self.X[i][0], self.X[i][1], \
-                self.N[i]) for i in range(0, self.dim)]
-        self.pt_cube = np.array(list(itertools.product(*tmp))+[[0]*self.dim])
-        print(self.pt_cube.shape)
-        
-    #Evaluate a 1-dim Gaussian distribution from -infty to x 
-    #using the antiderivatie
-    def Phi(self, x, mean, sig):
-        if sig != 0:
-            return 0.5*(math.erf((x - mean) / (sig * math.sqrt(2))))+0.5
-            # return 0.5*(erf((x - mean) / (sig * math.sqrt(2))))+0.5
+        if(self.dim == 1):
+            self.idx_cube = list(range(self.N_matrix))
+            self.pt_partition = np.linspace(self.X[0][0], self.X[0][1], self.N[0] + 1)
+            self.cdf = np.zeros(self.N_matrix)
         else:
-            return int(x > mean)
-
-    # def Phi(self, x, mean, sig):
-    #     return norm.cdf(x,mean,sig)
+            tmp = [np.array(range(self.N[i])) for i in range(self.dim)]
+            self.idx_cube = list(itertools.product(*tmp))+[[0]*self.dim]
+            self.pt_partition = [np.linspace(self.X[i][0], self.X[i][1], self.N[i] + 1)\
+             for i in range(self.dim)]
+            self.cdf = [np.zeros(self.N[i] + 1) for i in range(self.dim)]
+            self.cdf_generator = [np.zeros(self.N[i]) for i in range(self.dim)]
+            self.sink = np.zeros(self.dim)
+        
+        self.result = np.zeros(self.N_matrix)
+        self.lower_threshold = 1 - self.err - self.beta
+        self.count = 0
+        self.err_max = 0
+    
+    def sum_p(self, sum, err, x_i):
+        if sum >= x_i:
+            tmp = sum
+            y = x_i + err
+            sum = tmp + y
+            err = (tmp - sum) + y
+        else:
+            tmp = sum + x_i
+            err = err + (x_i - tmp) + sum
+            sum = tmp
+        return sum, err
         
     @property
     def dictionary(self):
@@ -169,30 +187,48 @@ class IMC():
                'number_of_grid_workplace': [self.N], \
                'dimension_of_IMC': [self.N_matrix], \
                 'gridsize_of_workplace': [self.eta], \
-                'gridsize_of_measure': [self.beta]}
-    
-    # def __get_incl_meas_grid(self, grid):
-    #     tmp = [np.linspace(grid[i][0], grid[i][1], \
-    #             self.N_incl[i]).tolist() for i in range(0, self.dim)]
-    #     return itertools.product(*tmp)
+                'gridsize_of_measure': [self.beta],\
+                'num of measure' : [self.n_meas]
+                }
     
     #Generate [mean], generate [std] (or [Cholesky]), which is supposed to be a dim * dim matrix.       
     #In this function, 
     #the dim * dim matrix is reshaped as a dim^2 * 1 list of Boxes.
-    def __overapprx_row_mean_std(self, grid_point):
-        grid = [[grid_point[i], grid_point[i] + self.eta] \
+    def __overapprx_row_mean_std(self, idx):
+        if(self.dim == 1):
+            itvl = [[self.X[0][0]+ idx * self.eta[0], self.X[0][0] + (idx +1) * self.eta[0]]]
+            Q_meas = [np.linspace(itvl[0][0], itvl[0][1], self.n_meas[0], endpoint=False).tolist()]
+        else:
+        
+            itvl = [[self.X[i][0]+ idx[i] * self.eta[i], self.X[i][0] + (idx[i] +1) * self.eta[i]] \
+                    for i in range(self.dim)]
+            #Generate [y], which is a pseudo-grid to generate the inclusion of the
+            #'reachable set of Gauss measures'. 
+            #As a continuation of __get_w_N_grid( ), 
+            #this function records the 'bottom-left' point of the required-size grids.
+            tmp = [np.linspace(itvl[i][0], itvl[i][1], self.n_meas[i], endpoint=False).tolist()\
                 for i in range(self.dim)]
-        #Generate [y], which is a pseudo-grid to generate the inclusion of the
-        #'reachable set of Gauss measures'. 
-        #As a continuation of __get_w_N_grid( ), 
-        #this function records the 'bottom-left' point of the required-size grids.
-        tmp = [np.linspace(grid[i][0], grid[i][1], \
-                self.N_incl[i]).tolist() for i in range(0, self.dim)]
-        Q_meas = list(itertools.product(*tmp))
+            Q_meas = list(itertools.product(*tmp))
+
+        # if(self.dim == 1):
+        #     itvl = [[self.X[0][0]+ idx * self.eta[0], self.X[0][0] + (idx +1) * self.eta[0]]]
+        # else:
+        
+        #     itvl = [[self.X[i][0]+ idx[i] * self.eta[i], self.X[i][0] + (idx[i] +1) * self.eta[i]] \
+        #             for i in range(self.dim)]
+        #     #Generate [y], which is a pseudo-grid to generate the inclusion of the
+        #     #'reachable set of Gauss measures'. 
+        #     #As a continuation of __get_w_N_grid( ), 
+        #     #this function records the 'bottom-left' point of the required-size grids.
+        # tmp = [np.linspace(itvl[i][0], itvl[i][1], self.n_meas[i], endpoint=False).tolist()\
+        #         for i in range(self.dim)]
+        # Q_meas = list(itertools.product(*tmp))
+
+
         mean = []
         std = []
         for q in Q_meas:
-            g_box = [[q[i], q[i] + self.w] for i in range(self.dim)]
+            g_box = [[q[i], q[i] + self.w[i]] for i in range(self.dim)]
             mean.append(lib.fn(g_box, self.f) if self.use_fn_f is not None \
                 else (lib.fc(g_box, self.f, self.L_f, self.fp) if self.L_f != 0 \
                       else self.f))
@@ -235,32 +271,50 @@ class IMC():
     
     def __evaluate_discrete_probability(self, mean, std):
         std_array = np.diag(std)
-        # mean_array = np.array(mean)
-        # x = (self.pt_cube-mean_array)/std_array
-        # y = (self.pt_cube+self.eta-mean_array)/std_array
+        
+        # tmp1 = np.zeros((self.N_matrix,self.dim))
+        # tmp2 = np.zeros((self.N_matrix,self.dim))
+        # for i in range(self.dim):
+        #     tmp1[:,i] = self.X[i][0] + (self.idx_cube[:,i] + 1) * self.eta[i]
+        #     tmp1[-1,i] = self.X[i][1]
+        #     tmp1[:,i] = norm.cdf((tmp1[:,i] - mean[i])/std_array[i])
 
-        # mean_array = np.array([mean]*self.N_matrix)
-        # std_array = np.array([np.diag(std).tolist()]*self.N_matrix)
+        #     tmp2[:,i] = self.X[i][0] + self.idx_cube[:,i] * self.eta[i]
+        #     tmp2[:,i] = norm.cdf((tmp2[:,i] - mean[i])/std_array[i])
+        
+        # result = np.prod(tmp1-tmp2,axis=1)
+        # result[-1] = 1-result[-1]
 
-        # tmp1 = norm.cdf((self.eta + self.pt_cube-mean_array)/std_array)
-        # tmp2 = norm.cdf((self.pt_cube-mean_array)/std_array)
-        tmp_X = np.array(self.X)
-        tmp1 = np.zeros((self.N_matrix,self.dim))
-        tmp2 = np.zeros((self.N_matrix,self.dim))
-        for i in range(self.dim):
-            self.pt_cube[-1,i] = tmp_X[i,1]-self.eta
-            # tmp1 = norm.cdf(self.eta + self.pt_cube,mean_array,std_array)
-            tmp1[:,i] = norm.cdf((self.eta + self.pt_cube[:,i]-mean[i])/std_array[i])
-            self.pt_cube[-1,i] = tmp_X[i,0]
-            # tmp2 = norm.cdf(self.pt_cube,mean_array,std_array)
-            tmp2[:,i] = norm.cdf((self.pt_cube[:,i]-mean[i])/std_array[i])
+        if(self.dim == 1):
+            ndtr((self.pt_partition - mean[0])/std_array[0], out=self.cdf)
+            self.result[:-1] = self.cdf[1:] - self.cdf[:-1]
+            self.result[-1] = 1 - self.cdf[-1] + self.cdf[0]
+        else:
+            for i in range(self.dim):
+                ndtr((self.pt_partition[i] - mean[i])/std_array[i], out=self.cdf[i])
+                self.cdf_generator[i] = self.cdf[i][1:] - self.cdf[i][:-1]
+                self.sink[i] = self.cdf[i][-1] - self.cdf[i][0]
+            cdf_cube = np.meshgrid(*self.cdf_generator)
+            self.result[:-1] = np.multiply.reduce(cdf_cube).flatten()
+            self.result[-1] = 1 - np.prod(self.sink)
 
-        # tmp1 = norm.cdf(x)
-        # tmp2 = norm.cdf(y)
-        result = np.prod(tmp1-tmp2,axis=1)
-        result[-1] = 1-result[-1]
-        result = np.where(result < self.err, 0, result)
-        return result / np.sum(result) #normalize
+        # print(np.count_nonzero(self.result))
+        # result = self.result[np.argwhere(self.result).squeeze()]
+        # print(np.min(result), np.max(result))
+        
+        # sum = err = 0
+        # for x in result:
+        #     sum, err = self.sum_p(sum, err, x)
+
+        # tmp = abs(np.sum(result)-1)
+        # if(tmp):
+        #    self.count = self.count + 1
+        #    if(tmp > self.err_max):
+        #     self.err_max = tmp
+
+        self.result[self.result < self.err] = 0
+
+        return self.result / np.sum(self.result) #normalize
 
     # def __evaluate_discrete_probability(self, mean, std, q):
     #     #Evaluate the transition probability T(grid_point, q).
@@ -388,48 +442,61 @@ class IMC():
         # return list(zip(lower_bounds, upper_bounds))
         return lower_bounds, upper_bounds
     
-    def output(self, grid_point):
-        row_measure = self.__get_row_measure(grid_point)
+    def output(self, idx):
+        row_measure = self.__get_row_measure(idx)
         
-        if self.N_incl[0] > 1:
-             upper_bounds = np.max(row_measure, axis=0)
-             lower_bounds = np.min(row_measure, axis=0)
+        if len(row_measure) == 1:
+            index = np.argwhere(row_measure[0]).squeeze()
+            upper_bounds = row_measure[0][index]
+            lower_bounds = upper_bounds.copy()
         else:
-            upper_bounds = lower_bounds = row_measure[0]
+            upper_bounds = np.max(row_measure, axis=0)
+            lower_bounds = np.min(row_measure, axis=0)
+            index = np.argwhere(upper_bounds).squeeze()
+            upper_bounds = upper_bounds[index]
+            lower_bounds = lower_bounds[index]        
 
-        # index = np.nonzero(upper_bounds)
-        # loc = np.argwhere(upper_bounds)
-        # upper_bounds = upper_bounds[index]
-        # lower_bounds = lower_bounds[index]
+        upper_bounds += self.beta
+        upper_bounds[upper_bounds > 1] = 1
 
 
-        upper_bounds = upper_bounds + self.beta
-        upper_bounds = np.where(upper_bounds > 1, 1, upper_bounds)
-        upper_bounds = \
-            np.where(upper_bounds == self.beta, 0, upper_bounds)
+        # upper_bounds = upper_bounds + self.beta
+        # upper_bounds[upper_bounds > 1] = 1
+        # upper_bounds[upper_bounds == self.beta] = 0
         
-        lower_bounds = lower_bounds - self.beta
-        lower_bounds = np.where(lower_bounds < self.err, 0, lower_bounds)
-        lower_bounds = \
-            np.where(lower_bounds > 1 - self.err -self.beta, 1, lower_bounds)
-        row = []
+        # upper_bounds = np.where(upper_bounds > 1, 1, upper_bounds)
+        # upper_bounds = \
+        #     np.where(upper_bounds == self.beta, 0, upper_bounds)
         
-        # for i, j in enumerate (loc):
+        lower_bounds -= self.beta
+        lower_bounds[lower_bounds < self.err] = 0
+        lower_bounds[lower_bounds > self.lower_threshold] = 1
+        # lower_bounds = np.where(lower_bounds < self.err, 0, lower_bounds)
+        # lower_bounds = \
+        #     np.where(lower_bounds > 1 - self.err -self.beta, 1, lower_bounds)
+        
+        return index, lower_bounds, upper_bounds
+        # return np.vstack((index, lower_bounds, upper_bounds)).T
+        
+
+        # row = []
+        
+        # for i, j in enumerate(index):
         #     row.append([j,lower_bounds[i],upper_bounds[i]])
 
-        for i, j in enumerate(upper_bounds):
-            if j:
-                # j = j + self.beta
-                # if j > 1:
-                #     j = 1
-                # if lower_bounds[i] > 1 - self.err:
-                #     lower_bounds[i] = 1
-                # else:
-                #     lower_bounds[i] = lower_bounds[i] - self.beta
-                #     if lower_bounds[i] < self.err:
-                #         lower_bounds[i] = 0
-                row.append([i,lower_bounds[i],j])
-        return row
+        # for i, j in enumerate(upper_bounds):
+        #     if j:
+        #         # j = j + self.beta
+        #         # if j > 1:
+        #         #     j = 1
+        #         # if lower_bounds[i] > 1 - self.err:
+        #         #     lower_bounds[i] = 1
+        #         # else:
+        #         #     lower_bounds[i] = lower_bounds[i] - self.beta
+        #         #     if lower_bounds[i] < self.err:
+        #         #         lower_bounds[i] = 0
+        #         row.append([i,lower_bounds[i],j])
+        # return row
 
     # def output(self, grid_point):
     #     row = []
