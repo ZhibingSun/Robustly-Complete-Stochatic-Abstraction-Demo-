@@ -312,9 +312,6 @@ def tan(b):
 
 """ End of fundamental functions."""
 
-
-
-
 """ Begin of inclusion functions."""
 #Natural inclusion function: mapping from Box to Box.
 #Input the domain and the original function f.

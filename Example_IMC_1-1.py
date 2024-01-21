@@ -17,7 +17,7 @@ from tqdm import tqdm
 from tqdm.gui import tqdm_gui
 
 
-X = [[0.0001, 1.2]]
+X = [[1e-4, 1.2]]
 precision = 8e-4
 a = 0.2 # mean reversion rate
 l = 0.05 # long-term mean
@@ -46,33 +46,54 @@ i = 0
 
 tic1 = time.time()
 
-"""
-with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
-    count = 0
-    f.write(str(imc.N_matrix) + '\n')
-    for i, q in enumerate(Qiter_slice):
-        f.write(str(i + j) + " ")
-        for k1, k2, k3 in imc.getrow(q):
-            f.write(str(k1) + " " + str(k2) + " " + str(k3)) + " "
-            #f.write('; ')
-        f.write('\n')
-"""
 def main():
 
     with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(1), 'w') as f:
         count = 0
-        f.write(str(imc.N_matrix) + '\n')
+        
+        # txt = ""
+        # txt += f"{imc.N_matrix}\n"
+        # # for i, q in enumerate(imc.idx_cube[:-1]):
+        # for i, (q) in tqdm(enumerate(imc.idx_cube[:-1]),total = imc.N_matrix-1):
+        # # for i, (q) in tqdm_gui(enumerate(imc.idx_cube[:-1]),leave=True):
+        #     index, lower_bounds, upper_bounds = imc.output(q)
+        #     for k in range(len(index)):
+        #         txt += f"{index[k]} {lower_bounds[k]} {upper_bounds[k]} "
+        #     txt += f"{imc.N_matrix}\n"
+            
+        #     # for k in range(len(index)):
+        #     #     f.write(f"{index[k]} {lower_bounds[k]} {upper_bounds[k]} ")
+        #     # # row = imc.output(q)
+        #     # # f.write(row.tobytes())
+        #     # f.write(f"{imc.N_matrix}\n")
+
+        #     count += len(index)
+        # txt += f"{imc.N_matrix-1} 1.0 1.0 {imc.N_matrix}\n"
+        # f.write(txt)
+
+        f.write(f"{imc.N_matrix}\n")
         # for i, q in enumerate(imc.idx_cube[:-1]):
         for i, (q) in tqdm(enumerate(imc.idx_cube[:-1]),total = imc.N_matrix-1):
         # for i, (q) in tqdm_gui(enumerate(imc.idx_cube[:-1]),leave=True):
             index, lower_bounds, upper_bounds = imc.output(q)
+            
+            # txt = ""
+            # for k in range(len(index)):
+            #     txt += f"{index[k]} {lower_bounds[k]} {upper_bounds[k]} "
+            # txt += f"{imc.N_matrix}\n"
+            # f.write(txt)
+            
             for k in range(len(index)):
                 f.write(f"{index[k]} {lower_bounds[k]} {upper_bounds[k]} ")
-            # row = imc.output(q)
-            # f.write(row.tobytes())
+            
+            # # row = imc.output(q)
+            # # f.write(row.tobytes())
             f.write(f"{imc.N_matrix}\n")
+
             count += len(index)
         f.write(f"{imc.N_matrix-1} 1.0 1.0 {imc.N_matrix}\n")
+        
+        
         count += 1
     return count
 

@@ -64,16 +64,24 @@ if not os.path.isdir(dirname):
     os.mkdir(dirname)
 with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
     count = 0
-    f.write(str(imc.N_matrix) + '\n')
+    f.write(f"{imc.N_matrix}\n")
     # for i, q in enumerate(imc.idx_cube[:-1]):
     for i, (q) in tqdm(enumerate(imc.idx_cube[:-1]),total = imc.N_matrix-1):
     # for i, (q) in tqdm_gui(enumerate(imc.idx_cube[:-1]),leave=True):
         index, lower_bounds, upper_bounds = imc.output(q)
+        
+        txt = ""
         for k in range(len(index)):
-            f.write(f"{index[k]} {lower_bounds[k]} {upper_bounds[k]} ")
-        # row = imc.output(q)
-        # f.write(row.tobytes())
-        f.write(f"{imc.N_matrix}\n")
+            txt += f"{index[k]} {lower_bounds[k]} {upper_bounds[k]} "
+        txt += f"{imc.N_matrix}\n"
+        f.write(txt)
+        
+        # for k in range(len(index)):
+        #     f.write(f"{index[k]} {lower_bounds[k]} {upper_bounds[k]} ")
+        # # row = imc.output(q)
+        # # f.write(row.tobytes())
+        # f.write(f"{imc.N_matrix}\n")
+
         count += len(index)
     f.write(f"{imc.N_matrix-1} 1.0 1.0 {imc.N_matrix}\n")
     count += 1

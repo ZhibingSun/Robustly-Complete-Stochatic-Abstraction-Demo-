@@ -22,8 +22,8 @@ from scipy.special import ndtr
 IMC (abstraction) class passes in 
 state space X as boxes, e.g. X = [[lb1, up1], [lb2, up2], ...];
 precision (completeness parameter) eps;
-f in the dynamics X_{t+1} = f(X_t) + b(X_t)w_t;
-b in the dynamics X_{t+1} = f(X_t) + b(X_t)w_t;
+f in the dynamics X_{t+1} = f(X_{t}) + b(X_{t})w_t;
+b in the dynamics X_{t+1} = f(X_{t}) + b(X_{t})w_t;
 
 We use the notations in the paper
 'Robustly Complete Finite-State Abstractions 
@@ -131,7 +131,6 @@ class IMC():
         # of the 'reachable set of Gauss measures'.
         # self.N_incl = adjust_N_grid(w_input)
 
-
         #conservative w
         self.n_meas = adjust_N_grid(w_nominal)
         self.w = [self.eta[i]/self.n_meas[i]\
@@ -139,7 +138,7 @@ class IMC():
         self.w_max  = max(self.w)
         # self.w = (vol / math.prod(adjust_N_grid(w))) ** (1 / self.dim)
         
-        print('w_refine=', self.w_max)
+        print('w_refine=', self.q)
         print('N=', self.n_meas)
         ##end __get_w_N_grid
               
@@ -149,7 +148,7 @@ class IMC():
             else tmp / math.sqrt(2)
 
         #Generate the discretized grids.
-        if(self.dim == 1):
+        if self.dim == 1:
             self.idx_cube = list(range(self.N_matrix))
             self.pt_partition = np.linspace(self.X[0][0], self.X[0][1], self.N[0] + 1)
             self.cdf = np.zeros(self.N_matrix)
@@ -195,9 +194,9 @@ class IMC():
     #In this function, 
     #the dim * dim matrix is reshaped as a dim^2 * 1 list of Boxes.
     def __overapprx_row_mean_std(self, idx):
-        if(self.dim == 1):
-            itvl = [[self.X[0][0]+ idx * self.eta[0], self.X[0][0] + (idx +1) * self.eta[0]]]
-            Q_meas = [np.linspace(itvl[0][0], itvl[0][1], self.n_meas[0], endpoint=False).tolist()]
+        if self.dim == 1:
+            itvl = [self.X[0][0]+ idx * self.eta[0], self.X[0][0] + (idx +1) * self.eta[0]]
+            Q_meas = np.linspace(itvl[0], itvl[1], self.n_meas[0], endpoint=False).tolist()
         else:
         
             itvl = [[self.X[i][0]+ idx[i] * self.eta[i], self.X[i][0] + (idx[i] +1) * self.eta[i]] \
@@ -210,7 +209,7 @@ class IMC():
                 for i in range(self.dim)]
             Q_meas = list(itertools.product(*tmp))
 
-        # if(self.dim == 1):
+        # if self.dim == 1:
         #     itvl = [[self.X[0][0]+ idx * self.eta[0], self.X[0][0] + (idx +1) * self.eta[0]]]
         # else:
         
@@ -224,23 +223,24 @@ class IMC():
         #         for i in range(self.dim)]
         # Q_meas = list(itertools.product(*tmp))
 
-
         mean = []
         std = []
         for q in Q_meas:
-            g_box = [[q[i], q[i] + self.w[i]] for i in range(self.dim)]
+            if self.dim ==1:
+                g_box = [[q, q + self.w[0]]]
+            else:
+                g_box = [[q[i], q[i] + self.w[i]] for i in range(self.dim)]
             mean.append(lib.fn(g_box, self.f) if self.use_fn_f is not None \
                 else (lib.fc(g_box, self.f, self.L_f, self.fp) if self.L_f != 0 \
                       else self.f))
-            std.append([lib.fn([g_box[i]], self.b[i][j]) \
-                      if self.use_fn_b is not None \
+            std.append([lib.fn([g_box[i]], self.b[i][j]) if self.use_fn_b is not None \
                       else(lib.fc([g_box[i]], self.b[i][j], self.L_b[i][j]) \
                            if self.L_b[i][j] != 0 else self.b[i][j]) \
                           for i in range(self.dim) for j in range(self.dim)])
         return mean, std
     
     #discretize [mean] by beta and find ref points of mean
-    #discretize [std] (or [Cholesky]) by beta and find ref points of mean
+    #discretize [std] (or [Cholesky]) by beta and find ref points of std
     def __ref_mean_std(self, grid_point):
         mean_list, std_list = self.__overapprx_row_mean_std(grid_point)
         #Generate ref point of mean.
@@ -282,10 +282,10 @@ class IMC():
         #     tmp2[:,i] = self.X[i][0] + self.idx_cube[:,i] * self.eta[i]
         #     tmp2[:,i] = norm.cdf((tmp2[:,i] - mean[i])/std_array[i])
         
-        # result = np.prod(tmp1-tmp2,axis=1)
-        # result[-1] = 1-result[-1]
+        # self.result = np.prod(tmp1-tmp2,axis=1)
+        # self.result[-1] = 1-self.result[-1]
 
-        if(self.dim == 1):
+        if self.dim == 1:
             ndtr((self.pt_partition - mean[0])/std_array[0], out=self.cdf)
             self.result[:-1] = self.cdf[1:] - self.cdf[:-1]
             self.result[-1] = 1 - self.cdf[-1] + self.cdf[0]
@@ -294,8 +294,11 @@ class IMC():
                 ndtr((self.pt_partition[i] - mean[i])/std_array[i], out=self.cdf[i])
                 self.cdf_generator[i] = self.cdf[i][1:] - self.cdf[i][:-1]
                 self.sink[i] = self.cdf[i][-1] - self.cdf[i][0]
-            cdf_cube = np.meshgrid(*self.cdf_generator)
-            self.result[:-1] = np.multiply.reduce(cdf_cube).flatten()
+            cdf_cube = np.meshgrid(*self.cdf_generator, indexing='ij')
+            if self.dim == 2:
+                self.result[:-1] = np.multiply(*cdf_cube).flatten()    
+            else:
+                self.result[:-1] = np.multiply.reduce(cdf_cube).flatten()
             self.result[-1] = 1 - np.prod(self.sink)
 
         # print(np.count_nonzero(self.result))
@@ -307,9 +310,9 @@ class IMC():
         #     sum, err = self.sum_p(sum, err, x)
 
         # tmp = abs(np.sum(result)-1)
-        # if(tmp):
+        # if tmp:
         #    self.count = self.count + 1
-        #    if(tmp > self.err_max):
+        #    if tmp > self.err_max:
         #     self.err_max = tmp
 
         self.result[self.result < self.err] = 0
@@ -504,7 +507,12 @@ class IMC():
     #         if j[1]:
     #             row.append([i,j[0],j[1]])
     #     return row
-            
+    
+    
+
+
+
+
     def getrow_ref(self, grid_point):
         ref_measure = self.__get_row_ref_measure(grid_point)
         assert ref_measure.shape[0] == self.N_matrix
