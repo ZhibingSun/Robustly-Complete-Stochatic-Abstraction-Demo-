@@ -24,12 +24,20 @@ l = 0.05 # long-term mean
 sigma = 0.3 # volatility
 dt = 0.0001
 
+L_f = 1 - a * dt
+L_b = 50 * math.sqrt(dt) * sigma
+
+# f_const = a * l * dt
+# f = lambda x: L_f * x + f_const
+
+# b_const = sigma * math.sqrt(dt)
+# b = lambda x: lib.sqrt(x) * b_const
+
 
 f = lambda x: x + a * (l - x) * dt
 b = lambda x: sigma * lib.sqrt(x) * math.sqrt(dt)
 
-L_f = 1 - a * dt
-L_b = 50 * math.sqrt(dt) * sigma
+
 
 imc = IMC(X, precision, f, b, L_f, L_b, use_fn_b=True, ws_dist_ratio=1.45)
 print(imc.dictionary)
@@ -138,6 +146,8 @@ count = main()
 with open(dirname + '/label1_1.txt', 'w') as f:
     f.write(f"0 {imc.N_matrix} {count}\n")
     # f.write(str(count) + '\n')
+
+# print(imc.count, imc.err_max)
 
 print(f'Computation time of IMC abstraction = {time.time() - tic1} sec')
 

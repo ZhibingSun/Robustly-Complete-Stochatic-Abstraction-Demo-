@@ -21,8 +21,10 @@ X = [[-1, 1]]
 precision = 1e-4  
 dt = 1e-10
 
+b_const = math.sqrt(dt)
+
 f = lambda x: x 
-b = lambda x: math.sqrt(dt)
+b = lambda x: b_const
 
 L_f = 1 
 L_b = 0

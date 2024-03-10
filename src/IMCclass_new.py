@@ -114,31 +114,33 @@ class IMC():
         vol = np.prod(self.eta)
         print(vol)
 
-        if self.L_f and self.L_b_max:   # self.L_f**2 + self.L_b_max**2 != 0
+        if self.L_f or self.L_b_max:   # self.L_f**2 + self.L_b_max**2 != 0
             # w = math.sqrt((self.ball_coefficient * self.kappa)**2 \
             #                     / tmp)
-            w_nominal = self.ball_coefficient * self.kappa / math.sqrt(self.L_f**2 + self.L_b_max**2)
+            self.w_nominal = self.ball_coefficient * self.kappa / math.sqrt(self.L_f**2 + self.L_b_max**2)
         else:
-            w_nominal = self.eta_max
+            self.w_nominal = self.eta_max
         # w_input = self.eta_max + 1e-6 if w >= self.eta_max else w
 
         #round up the number of grids for discretizing 
         #the domain of inclusion functions
-        adjust_N_grid = lambda x: [math.ceil(self.eta[i] / x)\
-             for i in range(self.dim)]
 
         #a discretization for the generation of inclusion 
         # of the 'reachable set of Gauss measures'.
         # self.N_incl = adjust_N_grid(w_input)
 
         #conservative w
-        self.n_meas = adjust_N_grid(w_nominal)
+
+        self.n_meas = [math.ceil(self.eta[i] / self.w_nominal)\
+             for i in range(self.dim)]
+
         self.w = [self.eta[i]/self.n_meas[i]\
             for i in range(self.dim)] 
         self.w_max  = max(self.w)
         # self.w = (vol / math.prod(adjust_N_grid(w))) ** (1 / self.dim)
         
-        print('w_refine=', self.q)
+        print('w_nominal = ',self.w_nominal)
+        print('w_refine=', self.w_max)
         print('N=', self.n_meas)
         ##end __get_w_N_grid
               
@@ -186,7 +188,7 @@ class IMC():
                'number_of_grid_workplace': [self.N], \
                'dimension_of_IMC': [self.N_matrix], \
                 'gridsize_of_workplace': [self.eta], \
-                'gridsize_of_measure': [self.beta],\
+                'gridsize_of_measure beta': [self.beta],\
                 'num of measure' : [self.n_meas]
                 }
     
@@ -195,19 +197,38 @@ class IMC():
     #the dim * dim matrix is reshaped as a dim^2 * 1 list of Boxes.
     def __overapprx_row_mean_std(self, idx):
         if self.dim == 1:
-            itvl = [self.X[0][0]+ idx * self.eta[0], self.X[0][0] + (idx +1) * self.eta[0]]
-            Q_meas = np.linspace(itvl[0], itvl[1], self.n_meas[0], endpoint=False).tolist()
+            itvl = [self.X[0][0]+ idx * self.eta[0], self.X[0][0] + (idx + 1) * self.eta[0]]
+
+            # tmp = [self.pt_partition[idx],self.pt_partition[idx + 1]]
+            # if itvl != tmp:
+            #     print("itvl not equal.\n")
+
+            n_meas = math.ceil((itvl[1] - itvl[0]) / self.w_nominal)
+            w = (itvl[1] - itvl[0]) / n_meas
+            idx_meas = list(range(n_meas))
         else:
         
-            itvl = [[self.X[i][0]+ idx[i] * self.eta[i], self.X[i][0] + (idx[i] +1) * self.eta[i]] \
+            itvl = [[self.X[i][0]+ idx[i] * self.eta[i], self.X[i][0] + (idx[i] + 1) * self.eta[i]] \
                     for i in range(self.dim)]
+
+            # tmp = [[self.pt_partition[i][idx[i]],self.pt_partition[i][idx[i] + 1]] for i in range(self.dim)]
+            # if itvl != tmp:
+            #     print("itvl not equal.\n")
+
+            n_meas = [math.ceil((itvl[i][1] - itvl[i][0]) / self.w_nominal) for i in range(self.dim)]
+            w = [(itvl[i][1] - itvl[i][0]) / n_meas[i] for i in range(self.dim)]
             #Generate [y], which is a pseudo-grid to generate the inclusion of the
             #'reachable set of Gauss measures'. 
             #As a continuation of __get_w_N_grid( ), 
             #this function records the 'bottom-left' point of the required-size grids.
-            tmp = [np.linspace(itvl[i][0], itvl[i][1], self.n_meas[i], endpoint=False).tolist()\
-                for i in range(self.dim)]
-            Q_meas = list(itertools.product(*tmp))
+            
+            
+            # tmp = [np.linspace(itvl[i][0], itvl[i][1], self.n_meas[i], endpoint=False).tolist()\
+            #     for i in range(self.dim)]
+            # idx_meas = list(itertools.product(*tmp))
+            
+            tmp = [list(range(n_meas[i])) for i in range(self.dim)]
+            idx_meas = list(itertools.product(*tmp))
 
         # if self.dim == 1:
         #     itvl = [[self.X[0][0]+ idx * self.eta[0], self.X[0][0] + (idx +1) * self.eta[0]]]
@@ -225,18 +246,46 @@ class IMC():
 
         mean = []
         std = []
-        for q in Q_meas:
+        for q_idx in idx_meas:
             if self.dim ==1:
-                g_box = [[q, q + self.w[0]]]
+                g_box = [[itvl[0] + q_idx * w, itvl[0] + (q_idx + 1) * w]]
             else:
-                g_box = [[q[i], q[i] + self.w[i]] for i in range(self.dim)]
-            mean.append(lib.fn(g_box, self.f) if self.use_fn_f is not None \
-                else (lib.fc(g_box, self.f, self.L_f, self.fp) if self.L_f != 0 \
-                      else self.f))
-            std.append([lib.fn([g_box[i]], self.b[i][j]) if self.use_fn_b is not None \
-                      else(lib.fc([g_box[i]], self.b[i][j], self.L_b[i][j]) \
-                           if self.L_b[i][j] != 0 else self.b[i][j]) \
-                          for i in range(self.dim) for j in range(self.dim)])
+                # g_box = [[q_idx[i], q_idx[i] + self.w[i]] for i in range(self.dim)]
+                
+                g_box = [[float(itvl[i][0] + q_idx[i] * w[i]), float(itvl[i][0] + (q_idx[i] + 1) * w[i])] \
+                     for i in range(self.dim)]
+            
+            if self.use_fn_f is not None:
+                mean.append(lib.fn(g_box, self.f))
+            elif self.L_f:
+                mean.append(lib.fc(g_box, self.f, self.L_f, self.fp))
+            else:
+                 mean.append(self.f) # f is const?
+
+            if self.use_fn_b is not None:
+                std.append([lib.fn([g_box[i]], self.b[i][j]) \
+                     for i in range(self.dim) for j in range(self.dim)]) # used in eg1
+            else:
+                tmp = []
+                for i in range(self.dim):
+                    for j in range(self.dim):
+                        if self.L_b[i][j]:
+                            tmp.append(lib.fc([g_box[i]], self.b[i][j], self.L_b[i][j]))
+                        else:
+                            tmp.append(self.b[i][j]) # b[i][j] is const?
+                std.append(tmp)    
+            
+            # tmp = []
+            # for i in range(self.dim):
+            #     for j in range(self.dim):
+            #         if self.use_fn_b is not None:
+            #             tmp.append(lib.fn([g_box[i]], self.b[i][j]))
+            #         elif self.L_b[i][j]:
+            #             tmp.append(lib.fc([g_box[i]], self.b[i][j], self.L_b[i][j]))
+            #         else:
+            #             tmp.append(self.b[i][j])    
+            # std.append(tmp)
+            
         return mean, std
     
     #discretize [mean] by beta and find ref points of mean
@@ -244,30 +293,40 @@ class IMC():
     def __ref_mean_std(self, grid_point):
         mean_list, std_list = self.__overapprx_row_mean_std(grid_point)
         #Generate ref point of mean.
-        tmp1 = []
+        mean_ref_list = []
         for mean_box in mean_list:
+            tmp1 = []
             for i in range(self.dim):
                 if isinstance(mean_box, lib.Box):
                     a = math.floor(mean_box.X[i][1] / self.beta) * self.beta
-                    tmp1.append(np.mgrid[mean_box.X[i][0]:a:self.beta] \
-                        if a >= mean_box.X[i][0] else [mean_box.X[i][0]])
+                    if a >= mean_box.X[i][0]:
+                        tmp1.append(np.mgrid[mean_box.X[i][0]:a:self.beta])
+                        # b = math.ceil((mean_box.X[i][1] - mean_box.X[i][0]) / self.beta)
+                        # if b > 1:
+                        #     print(b)
+                    else:
+                        tmp1.append([mean_box.X[i][0]])
                 else:
-                    tmp1.append([mean_box[i]])
+                    tmp1.append([mean_box[i]]) # single const
+            mean_ref_list += list(itertools.product(*tmp1))
+
         #Generate ref point of std.
-        tmp2 = []
+        std_ref_list = []
         for std_box in std_list:
+            tmp2 = []
             for std in std_box:
                 if isinstance(std, lib.Box):
                     a = math.floor(std.X[0][1] / self.beta) * self.beta
-                    tmp2.append(np.mgrid[std.X[0][0]:a:self.beta]  \
-                        if a >= std.X[0][0] else [std.X[0][0]])
+                    if a >= std.X[0][0]:
+                        tmp2.append(np.mgrid[std.X[0][0]:a:self.beta])
+                    else:
+                         tmp2.append([std.X[0][0]])
                 else:
                     #In this case, the current entry of b is a constant.
-                    #The generator should yield an iterable 
-                    #rather than a number for the downstream calculation.
                     tmp2.append([std])
                     #yield [math.floor(std / self.beta) * self.beta]
-        return list(itertools.product(*tmp1)), list(itertools.product(*tmp2))
+            std_ref_list += list(itertools.product(*tmp2))
+        return mean_ref_list, std_ref_list
     
     def __evaluate_discrete_probability(self, mean, std):
         std_array = np.diag(std)
@@ -306,12 +365,13 @@ class IMC():
         # print(np.min(result), np.max(result))
         
         # sum = err = 0
-        # for x in result:
+        # for x in self.result:
         #     sum, err = self.sum_p(sum, err, x)
-
-        # tmp = abs(np.sum(result)-1)
+        # tmp = abs(sum-1)
+        
+        # tmp = abs(np.sum(self.result)-1)
         # if tmp:
-        #    self.count = self.count + 1
+        #    self.count += 1
         #    if tmp > self.err_max:
         #     self.err_max = tmp
 
@@ -450,18 +510,19 @@ class IMC():
         
         if len(row_measure) == 1:
             index = np.argwhere(row_measure[0]).squeeze()
+            # index = np.atleast_1d(index)
             upper_bounds = row_measure[0][index]
             lower_bounds = upper_bounds.copy()
         else:
             upper_bounds = np.max(row_measure, axis=0)
             lower_bounds = np.min(row_measure, axis=0)
             index = np.argwhere(upper_bounds).squeeze()
+            # index = np.atleast_1d(index)
             upper_bounds = upper_bounds[index]
             lower_bounds = lower_bounds[index]        
 
         upper_bounds += self.beta
         upper_bounds[upper_bounds > 1] = 1
-
 
         # upper_bounds = upper_bounds + self.beta
         # upper_bounds[upper_bounds > 1] = 1
@@ -508,11 +569,6 @@ class IMC():
     #             row.append([i,j[0],j[1]])
     #     return row
     
-    
-
-
-
-
     def getrow_ref(self, grid_point):
         ref_measure = self.__get_row_ref_measure(grid_point)
         assert ref_measure.shape[0] == self.N_matrix

@@ -22,7 +22,7 @@ X = [[-1, 1], [-1, 1]]
 precision = 0.08
 L_f = 1
 L_b = [[0, 0], [0, 0]] 
-cor = False
+cor = False # move in imc?
 
 
 f = lambda x: [x[0], x[1]]
@@ -87,6 +87,8 @@ with open(dirname + '/IMC_abstraction_matrix_new_{}.txt'.format(i+1), 'w') as f:
     count += 1
 # print(imc.count)
 print('count=', count)
+
+# print(imc.count, imc.err_max)
 
 print(f'Computation time of IMC abstraction = {time.time() - tic1} sec')
         
