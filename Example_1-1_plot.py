@@ -49,10 +49,10 @@ imc_idx = [0, 0, 1, 1]
 plt.figure(figsize=(50,10))
 for i, f in enumerate(filenames):
     with open(f, "r") as fp:
-        lines = [x[:-1].split("\t") for x in fp.readlines()]
+        lines = [x[:-1].split("\t\t") for x in fp.readlines()]
         lines = list(filter(lambda x: len(x) > 1, lines))
         print(len(lines))
-        lines = [[imc_list[imc_idx[i]].pt_partition[int(x)], float(y)] for x, z, y in lines]
+        lines = [[imc_list[imc_idx[i]].pt_partition[int(x)], float(y)] for x, y in lines]
         lines = np.array(lines)
         plt.plot(lines[:,0], lines[:,1], label=labels[i], color=colors[i], linestyle=linestyles[i])
 plt.legend()

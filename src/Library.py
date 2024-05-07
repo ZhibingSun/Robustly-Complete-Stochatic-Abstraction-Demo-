@@ -55,7 +55,7 @@ class Box:
                         self.X[dim][0] * b.X[dim][1], 
                         self.X[dim][1] * b.X[dim][0], 
                         self.X[dim][1] * b.X[dim][1]]
-            return [min(*tmp),max(*tmp)]
+            return [min(*tmp), max(*tmp)]
         elif self.dim == len(b):
             tmp = [self.X[dim][0] * b[dim][0], 
                         self.X[dim][0] * b[dim][1], 
