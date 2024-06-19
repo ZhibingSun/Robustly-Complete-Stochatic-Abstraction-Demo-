@@ -212,7 +212,7 @@ class Interval:
 
 class IMC:
     def __init__(self, dim, dependency, symmetry, x, f, tag_f, cif_f,\
-                 b, tag_b, cif_b, precision,\
+                 b, tag_b, cif_b, n, precision=1e-4,\
                  kappa_coefficient=0.50,eps_margin=0.999,\
                  ball_coefficient=1,ws_dist_ratio = 1.3, err=1e-8):
 
@@ -226,21 +226,22 @@ class IMC:
         self.b = b
         self.tag_b = tag_b
         self.cif_b = cif_b
+
         # parameters for completeness
-        self.precision = precision
-        self.kappa_coefficient = kappa_coefficient
-        self.eps_margin = eps_margin
-        self.ball_coefficient = ball_coefficient
-        self.ws_dist_ratio = ws_dist_ratio
-        self.err = err
+        # self.precision = precision
+        # self.kappa_coefficient = kappa_coefficient
+        # self.eps_margin = eps_margin
+        # self.ball_coefficient = ball_coefficient
+        # self.ws_dist_ratio = ws_dist_ratio
+        # self.err = err
 
         #This is used for a direct calculation of eta
-        self.eps = self.precision * (self.eps_margin - self.kappa_coefficient)
+        # self.eps = self.precision * (self.eps_margin - self.kappa_coefficient)
 
         #Determine the 'inflation' precision for the inclusion functions
-        self.kappa = self.kappa_coefficient * self.precision
+        # self.kappa = self.kappa_coefficient * self.precision
         
-        eta_nominal = self.eps / (self.ws_dist_ratio + 2 * self.ball_coefficient)
+        # eta_nominal = self.eps / (self.ws_dist_ratio + 2 * self.ball_coefficient)
 
 
         if self.dim == 1:
@@ -248,7 +249,8 @@ class IMC:
             self.wid = self.x[1] - self.x[0]
             self.mid = (self.x[1] + self.x[0]) * 0.5
             self.vol = self.wid
-            self.n = math.ceil(self.wid / eta_nominal)
+            # self.n = math.ceil(self.wid / eta_nominal)
+            self.n = n
             
             # self.n = 10278
             
@@ -258,10 +260,10 @@ class IMC:
                 self.n += 1
 
             self.eta = self.wid / self.n
-            self.n_matrix = self.n + 1
+            self.n_matrix = self.n + 2
 
-            tmp = self.ws_dist_ratio * self.eta
-            self.beta = tmp 
+            # tmp = self.ws_dist_ratio * self.eta
+            # self.beta = tmp 
             # if self.L_b == 0 \
             # else tmp / math.sqrt(2)
 
@@ -282,18 +284,27 @@ class IMC:
             self.cdf = np.zeros(self.n_matrix)
             # else: # tag_b > 1 b(x) is not const
             
-            self.itvl_tmp = np.zeros((2, self.n + 1))
-            self.itvl_min_max = np.zeros((2, self.n + 1))
+            self.itvl_tmp = np.zeros((2, self.n + 2))
+            self.itvl_min_max = np.zeros((2, self.n + 2))
             self.rel_l = 0
             self.rel_r = 1
             self.abs_l = 0
             self.abs_r = 1
             self.cdf_tmp = np.zeros(2)
             self.idx_tmp = np.zeros(2)
+            
+            self.target_tmp = np.zeros(2)
+            self.target_min_max = np.zeros(2)
+            
             self.sink_tmp = np.zeros(2)
             self.sink_min_max = np.zeros(2)
+            self.tag_target_sink = 0
             self.sum_l = 0
             self.sum_u = 0
+            self.ndtr_rel_peak = 3.4e-14
+            self.ndtr_rel_u = 1 / (1 - self.ndtr_rel_peak)
+            self.ndtr_rel_l = 1 / (1 + self.ndtr_rel_peak)
+
         else: # self.dim > 1
 
             pass
@@ -309,17 +320,15 @@ class IMC:
         return f'dim = {self.dim}, dependency = {self.dependency}, '\
              + f'symmetry = {self.symmetry}, x = {self.x}, n = {self.n}, '\
              + f'n_matrix = {self.n_matrix}, m = {self.m}, '\
-             + f'(m - 1) / n = {(self.m - 1) // self.n}, wid = {self.wid}, '\
-             + f'mid = {self.mid}, eta = {self.eta}, '\
-             + f'precision = {self.precision:.7e}, beta = {self.beta}, '\
+             + f'(m - 2) / n = {(self.m - 2) // self.n}, wid = {self.wid}, '\
+             + f'mid = {self.mid}, eta = {self.eta:.17e}, '\
              + f'threshold = {self.threshold}.'
+            # + f'precision = {self.precision:.7e}, beta = {self.beta}, '\
+             
 
 
 
     def evaluate_itvl_prob(self, idx):
-        
-        
-        
         if self.dim == 1:
             x_i = [self.pt_partition[idx],self.pt_partition[idx + 1]]
             wid_i = x_i[1] - x_i[0]
@@ -634,42 +643,42 @@ class IMC:
                 # determine abs_l and rel_l
                 self.abs_l = idx - self.rel_l
                 ndtr((self.pt_partition[[self.abs_l, self.abs_l + 1]] - x_i[0]) / self.b, out = self.cdf_tmp)
-                if self.cdf_tmp[1] - self.cdf_tmp[0] > self.threshold: # move left
+                if self.cdf_tmp[1] * self.ndtr_rel_u - self.cdf_tmp[0] * self.ndtr_rel_l > self.threshold: # move left
                     while self.abs_l - 1 >= 0:
                         ndtr((self.pt_partition[[self.abs_l - 1, self.abs_l]] - x_i[0]) / self.b, out = self.cdf_tmp)
-                        if self.cdf_tmp[1] - self.cdf_tmp[0] > self.threshold:
+                        if self.cdf_tmp[1] * self.ndtr_rel_u - self.cdf_tmp[0] * self.ndtr_rel_l > self.threshold:
                             self.abs_l -= 1
                             # self.count += 1
                         else:
                             break
-                else: # self.cdf_tmp[1] - self.cdf_tmp[0] <= self.threshold move right
+                else: # self.cdf_tmp[1] - self.cdf_tmp[0] <= self.threshold: move right
                     while 1 :
                         self.abs_l += 1
                         # self.count += 1
                         ndtr((self.pt_partition[[self.abs_l, self.abs_l + 1]] - x_i[0]) / self.b, out = self.cdf_tmp)
-                        if self.cdf_tmp[1] - self.cdf_tmp[0] > self.threshold:
+                        if self.cdf_tmp[1] * self.ndtr_rel_u - self.cdf_tmp[0] * self.ndtr_rel_l > self.threshold:
                             break
                 self.rel_l = idx - self.abs_l
                 # determine abs_r and rel_r
                 self.abs_r = idx + self.rel_r
-                if self.abs_r >self.n:
+                if self.abs_r > self.n:
                     self.abs_r -= 1
                 else:
                     ndtr(-(self.pt_partition[[self.abs_r - 1, self.abs_r]] - x_i[1]) / self.b, out = self.cdf_tmp)
-                    if -(self.cdf_tmp[1] - self.cdf_tmp[0]) > self.threshold: # move right
+                    if -(self.cdf_tmp[1] * self.ndtr_rel_u - self.cdf_tmp[0] * self.ndtr_rel_l) > self.threshold: # move right
                         while self.abs_r + 1 <= self.n:
                             ndtr(-(self.pt_partition[[self.abs_r, self.abs_r + 1]] - x_i[1]) / self.b, out = self.cdf_tmp)
-                            if -(self.cdf_tmp[1] - self.cdf_tmp[0]) > self.threshold:
+                            if -(self.cdf_tmp[1] * self.ndtr_rel_u - self.cdf_tmp[0] * self.ndtr_rel_l) > self.threshold:
                                 self.abs_r += 1
                                 # self.count += 1
                             else:
                                 break
-                    else: # self.cdf_tmp[1] - self.cdf_tmp[0] <= self.threshold move left
+                    else: # self.cdf_tmp[1] - self.cdf_tmp[0] <= self.threshold: move left
                         while 1 :
                             self.abs_r -= 1
                             # self.count += 1
                             ndtr(-(self.pt_partition[[self.abs_r - 1, self.abs_r]] - x_i[1]) / self.b, out = self.cdf_tmp)
-                            if -(self.cdf_tmp[1] - self.cdf_tmp[0]) > self.threshold:
+                            if -(self.cdf_tmp[1] * self.ndtr_rel_u - self.cdf_tmp[0] * self.ndtr_rel_l) > self.threshold:
                                 break
                 self.rel_r = self.abs_r - idx
 
@@ -690,35 +699,68 @@ class IMC:
                 ndtr(-np.abs(self.pt_partition[self.abs_l : self.abs_r + 1] - x_i[0]) / self.b, out=self.cdf[:row_len+1])
                 # print(f'{self.cdf[row_len]}')
                 
-                self.sink_tmp[0] = self.cdf[0] + self.cdf[row_len]
-                self.idx_tmp[0] = ndtr(wid_i/self.b) - 0.5
-                self.itvl_min_max[1][:self.rel_l] = self.cdf[1:self.rel_l+1] - self.cdf[:self.rel_l]
-                self.itvl_min_max[0][self.rel_l+1:row_len] = -self.cdf[self.rel_l+2:row_len+1] + self.cdf[self.rel_l+1:row_len]
+                # self.sink_tmp[0] = self.cdf[0] + self.cdf[row_len]
+                
+                self.target_min_max[1] = self.cdf[0] * self.ndtr_rel_u
+                self.sink_min_max[0] = self.cdf[row_len] * self.ndtr_rel_l
+                
+                self.idx_tmp[0] = ndtr(wid_i/self.b) * self.ndtr_rel_l - 0.5
+                self.itvl_min_max[1][:self.rel_l] = self.cdf[1:self.rel_l+1] * self.ndtr_rel_u - self.cdf[:self.rel_l] * self.ndtr_rel_l
+                self.itvl_min_max[0][self.rel_l+1:row_len] = -self.cdf[self.rel_l+2:row_len+1] * self.ndtr_rel_l + self.cdf[self.rel_l+1:row_len] * self.ndtr_rel_u
                 
                 ndtr(-np.abs(self.pt_partition[self.abs_l : self.abs_r + 1] - x_i[1]) / self.b, out=self.cdf[:row_len+1])
                 # print(f'{self.cdf[row_len]}')
                 
-                self.sink_tmp[1] = self.cdf[0] + self.cdf[row_len]
-                self.idx_tmp[1] = 0.5 - ndtr(-wid_i/self.b)
-                self.itvl_min_max[0][:self.rel_l] = self.cdf[1:self.rel_l+1] - self.cdf[:self.rel_l]
-                self.itvl_min_max[1][self.rel_l+1:row_len] = -self.cdf[self.rel_l+2:row_len+1] + self.cdf[self.rel_l+1:row_len]
+                # self.sink_tmp[1] = self.cdf[0] + self.cdf[row_len]
+                
+                self.target_min_max[0] = self.cdf[0] * self.ndtr_rel_l
+                self.sink_min_max[1] = self.cdf[row_len] * self.ndtr_rel_u
+                
+                self.idx_tmp[1] = 0.5 - ndtr(-wid_i/self.b) * self.ndtr_rel_u
+                self.itvl_min_max[0][:self.rel_l] = self.cdf[1:self.rel_l+1] * self.ndtr_rel_l - self.cdf[:self.rel_l] * self.ndtr_rel_u
+                self.itvl_min_max[1][self.rel_l+1:row_len] = -self.cdf[self.rel_l+2:row_len+1] * self.ndtr_rel_u + self.cdf[self.rel_l+1:row_len] * self.ndtr_rel_l
 
                 #
                 self.itvl_min_max[0][self.rel_l] = min(self.idx_tmp)
-                self.itvl_min_max[1][self.rel_l] = 1 - 2 * ndtr(-wid_i * 0.5 / self.b)
+                self.itvl_min_max[1][self.rel_l] = 1 - 2 * ndtr(-wid_i * 0.5 / self.b) * self.ndtr_rel_l
 
-                self.itvl_min_max[1][row_len] = max(self.sink_tmp)
-                if self.itvl_min_max[1][row_len] > self.threshold:
-                    self.count += 1
-                    if self.mid <= x_i[0] or self.mid >= x_i[1]:
-                        self.itvl_min_max[0][row_len] = min(self.sink_tmp)    
-                    else:
-                        self.itvl_min_max[0][row_len] = 2 * ndtr((self.pt_partition[self.abs_l] - self.mid) / self.b)
-                    index = list(range(self.abs_l,self.abs_r + 1))
-                    index[-1] = self.n
-                else: # self.itvl_min_max[1][row_len] <= self.threshold
-                    index = list(range(self.abs_l,self.abs_r))
+                if self.target_min_max[1] > self.threshold:
+                    self.tag_target_sink = 1
+                else:
+                    self.tag_target_sink = 0 
+                if self.sink_min_max[1] > self.threshold:
+                    self.tag_target_sink |= 2
+                match self.tag_target_sink:
+                    case 0:
+                        index = list(range(self.abs_l,self.abs_r))
+                    case 1:
+                        self.itvl_min_max[:,row_len] = self.target_min_max
+                        index = list(range(self.abs_l,self.abs_r + 1))
+                        index[-1] = self.n
+                    case 2:
+                        self.itvl_min_max[:,row_len] = self.sink_min_max
+                        index = list(range(self.abs_l,self.abs_r + 1))
+                        index[-1] = self.n + 1
+                    case 3:
+                        self.itvl_min_max[:,row_len] = self.target_min_max
+                        self.itvl_min_max[:,row_len+1] = self.sink_min_max
+                        index = list(range(self.abs_l,self.abs_r + 2))
+                        index[-2] = self.n
+                        index[-1] = self.n + 1
                 return index
+                    
+                # self.itvl_min_max[1][row_len] = max(self.sink_tmp)
+                # if self.itvl_min_max[1][row_len] > self.threshold:
+                #     self.count += 1
+                #     if self.mid <= x_i[0] or self.mid >= x_i[1]:
+                #         self.itvl_min_max[0][row_len] = min(self.sink_tmp)    
+                #     else:
+                #         self.itvl_min_max[0][row_len] = 2 * ndtr((self.pt_partition[self.abs_l] - self.mid) / self.b)
+                #     index = list(range(self.abs_l,self.abs_r + 1))
+                #     index[-1] = self.n
+                # else: # self.itvl_min_max[1][row_len] <= self.threshold
+                #     index = list(range(self.abs_l,self.abs_r))
+                # return index
                 # binary search version ends version 3
 
         else: # self.dim > 1
@@ -733,13 +775,13 @@ class IMC:
 
 
 
-    def output(self, idx):
-        self.evaluate_itvl_prob(idx)
+    # def output(self, idx):
+    #     self.evaluate_itvl_prob(idx)
         
-        index = np.argwhere(self.itvl_min_max[1]).squeeze()
-        upper_bounds = self.itvl_min_max[1][index]
-        lower_bounds = self.itvl_min_max[0][index]
-        return index, lower_bounds, upper_bounds
+    #     index = np.argwhere(self.itvl_min_max[1]).squeeze()
+    #     upper_bounds = self.itvl_min_max[1][index]
+    #     lower_bounds = self.itvl_min_max[0][index]
+    #     return index, lower_bounds, upper_bounds
 
 
 

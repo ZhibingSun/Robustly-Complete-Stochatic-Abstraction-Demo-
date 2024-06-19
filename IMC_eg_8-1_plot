@@ -1,0 +1,79 @@
+from src.IMC_Abstraction import IMC
+import math
+import time
+
+
+import os 
+from tqdm import tqdm
+from tqdm.gui import tqdm_gui
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+dim = 1
+dependency = 1
+symmetry = 0
+bound = 1
+x = [0, bound]
+f = lambda x: x
+tag_f = 1
+cif_f = 0
+
+dt = 1.0 / (1 << 14)
+b_const = math.sqrt(dt)
+b = b_const
+tag_b = 1
+cif_b = 0
+n = 1 << 16
+
+
+imc_list = []
+imc_list.append(IMC(dim, dependency, symmetry, x, f, tag_f, cif_f, b, tag_b, cif_b, n))
+print(imc_list[-1])
+
+# imc_list.append(IMC(dim, dependency, symmetry, x, f, tag_f, cif_f, b, tag_b, cif_b, n))
+# print(imc_list[-1])
+
+satisfaction_prob = []
+
+tic1 = time.time()
+
+filenames = ["./quan_max_power_index87_1.txt", "./quan_min_power_index87_1.txt"]
+colors = ["black", "blue"]
+labels = ["Max1", "Min1"]
+linestyles = ["solid", "solid", "dashdot", "dashdot"]
+linewidths = [0.1, 0.1, 0.1, 0.1]
+imc_idx = [0, 0, 1, 1]
+plt.figure(figsize=(10,10))
+for i, f in enumerate(filenames):
+    with open(f, "r") as fp:
+        lines = [x[:-1].split("\t\t") for x in fp.readlines()]
+        lines = list(filter(lambda x: len(x) > 1, lines))
+        print(len(lines))
+        lines = [[imc_list[imc_idx[i]].pt_partition[int(x)], float(y)] for x, y in lines[:-2]]
+        lines = np.array(lines)
+        
+        satisfaction_prob.append(lines[:,1])
+        
+        plt.plot(lines[:,0], lines[:,1], label=labels[i], color=colors[i], linestyle=linestyles[i], linewidth=linewidths[i])
+plt.plot(lines[:,0], 1-lines[:,0], label="theoretical solution", color="red", linestyle="solid", linewidth=0.1)
+
+plt.legend()
+
+# plt.show()
+plt.savefig("/Users/z235sun/Desktop/IMC_eg_8-1/IMC_eg_8-7.pdf", dpi=5000)
+
+plt.yscale("log")
+# # plt.show()
+plt.savefig("/Users/z235sun/Desktop/IMC_eg_8-1/IMC_eg_8-7_log.pdf", dpi=5000)
+
+abs_diff_max = max(satisfaction_prob[0]-satisfaction_prob[1])
+abs_diff_min = min(satisfaction_prob[0]-satisfaction_prob[1])
+rel_diff_max = max((satisfaction_prob[0]-satisfaction_prob[1])/satisfaction_prob[1])
+rel_diff_min = min((satisfaction_prob[0]-satisfaction_prob[1])/satisfaction_prob[1])
+num = np.argwhere(satisfaction_prob[0]-satisfaction_prob[1] < 0).squeeze()
+print(num)
+print(f'abs_diff_max = {abs_diff_max:.17e}, abs_diff_min = {abs_diff_min:.17e},\
+rel_diff_max = {rel_diff_max:.17e}, rel_diff_min = {rel_diff_min:.17e}.')
+
+print(f'Computation time of IMC plot = {time.time() - tic1} sec')
